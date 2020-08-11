@@ -8,17 +8,21 @@ import sys
 sys.path.append('/Users/josephabbate/Documents/research/fitting/lib')
 from mtanh_fit import *
 
+cer_type='cerquick'
+efit_type='EFIT01'
+
+thomson_sigs=['temp','dens']
+cer_sigs=['temp','rotation']
+scalar_sigs=['curr']
+
 debug=True
-debug_sig='dens'
+debug_sig='cer_temp_{}'.format(efit_type)
 debug_shot=163303
 
 batch_num=0
 
 time_base=50
 time_step=time_base
-
-cer_type='cerquick'
-efit_type='EFIT01'
 
 standard_psi=np.linspace(0,1,65)
 
@@ -34,6 +38,19 @@ def standardize_time(old_signal,old_timebase):
         else:
             new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
     return new_signal
+
+def plot_fit(signal,standard_psi,psi,value,uncertainty):
+    max_uncertainty=np.nanmax(uncertainty)
+    for ind in range(signal.shape[0]):
+        plt.plot(standard_psi, signal[ind], c='r')
+        plt.errorbar(psi[:,ind],
+                     value[:,ind],
+                     np.clip(uncertainty[:,ind],0,max_uncertainty),
+                     ls='None')
+        plt.xlabel('psi')
+        plt.ylabel(final_sig_name)
+        plt.title('{}ms'.format(standard_times[ind]))
+        plt.show()
 
 final_data={}
 for shot in data.keys():
@@ -51,7 +68,7 @@ for shot in data.keys():
     final_data[shot]['t_ip_flat']=data[shot]['t_ip_flat']
     final_data[shot]['ip_flat_duration']=data[shot]['ip_flat_duration']
     
-    for sig in ['curr']: #data[shot]['scalars']:
+    for sig in scalar_sigs:
         final_data[shot][sig]=standardize_time(data[shot]['scalars'][sig]['data'],
                                               data[shot]['scalars'][sig]['time'])
         if debug and sig==debug_sig and shot==debug_shot:
@@ -63,7 +80,7 @@ for shot in data.keys():
     get_psi=[interpolate.interp2d(data[shot][efit_type]['R'],data[shot][efit_type]['Z'],psirz[time_ind]) for time_ind in range(len(standard_times))]
 
     # CER
-    for signal in ['temp','rotation']:
+    for signal in cer_sigs:
         r=[]
         z=[]
         psi=[]
@@ -94,11 +111,15 @@ for shot in data.keys():
         uncertainty=np.full(np.shape(value),np.nanmean(np.abs(value))*.1)
         max_uncertainty=np.nanmax(uncertainty)*5
         value[np.where(error==1)]=np.nan
-        
-        final_data[shot]['cer_{}_{}'.format(signal,efit_type)] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times,debug= (debug and debug_sig==signal and debug_shot==shot), max_uncertainty=max_uncertainty)
+
+        final_sig_name='cer_{}_{}'.format(signal,efit_type)
+        final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
+
+        if debug and debug_sig==final_sig_name and debug_shot==shot:
+            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty)
 
     # Thomson
-    for signal in ['temp','dens']:
+    for signal in thomson_sigs:
         r=[]
         z=[]
         psi=[]
@@ -110,7 +131,6 @@ for shot in data.keys():
             for channel in range(data[shot]['thomson'][system][signal].shape[1]):
                 value.append(standardize_time(data[shot]['thomson'][system][signal].T[channel]/scale[signal],
                                               data[shot]['thomson'][system]['time']))
-                #uncertainty.append(data[shot]['cer'][system][channel][cer_type][signal]
 
                 if system=='TANGENTIAL':
                     r=data[shot]['thomson'][system]['R'].T[channel]
@@ -128,8 +148,12 @@ for shot in data.keys():
         max_uncertainty=np.nanmax(uncertainty)
         uncertainty[np.isclose(value,0)]=1e30
         uncertainty[np.isclose(uncertainty,0)]=1e30
-        
-        final_data[shot]['thomson_{}_{}'.format(signal,efit_type)] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times,debug= (debug and debug_sig==signal and debug_shot==shot),max_uncertainty=max_uncertainty) #real_to_psi_profile(psi,value,uncertainty,error, standard_psi,debug_profile= (debug and debug_sig==signal and debug_shot==shot))
 
+        final_sig_name='thomson_{}_{}'.format(signal,efit_type)
+        final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
+
+        if debug and debug_sig==final_sig_name and debug_shot==shot:
+            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty)
+    
 with open('final_data_batch_{}.pkl'.format(batch_num),'wb') as f:
     pickle.dump(final_data,f)

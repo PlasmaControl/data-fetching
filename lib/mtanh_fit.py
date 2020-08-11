@@ -5,7 +5,7 @@ from mpfit import mpfit
 
 import matplotlib.pyplot as plt
 
-def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out, debug=False,max_uncertainty=10):
+def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out):
     p0=np.array([1.0, 3.0, 0.01, 1.0, 0.01],dtype='float64')  #initial conditions
 
     parinfo=[]
@@ -58,16 +58,16 @@ def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out, debug=
 
         final_sig.append(shifted_mtanh(standard_psi,m.params))
         
-        if debug:
-            plt.plot(x,shifted_mtanh(x,m.params),c='r')
-            plt.errorbar(x,
-                         value[~excluded_inds,ind],
-                         np.clip(uncertainty[~excluded_inds,ind],0,max_uncertainty),
-                         ls='None')
-            plt.xlabel('psi')
-#            plt.ylabel(signal)
-            plt.title('{}ms'.format(t_out[ind]))
-            plt.show()
+#         if debug:
+#             plt.plot(x,shifted_mtanh(x,m.params),c='r')
+#             plt.errorbar(x,
+#                          value[~excluded_inds,ind],
+#                          np.clip(uncertainty[~excluded_inds,ind],0,max_uncertainty),
+#                          ls='None')
+#             plt.xlabel('psi')
+# #            plt.ylabel(signal)
+#             plt.title('{}ms'.format(t_out[ind]))
+#             plt.show()
 
     return np.array(final_sig)
 
