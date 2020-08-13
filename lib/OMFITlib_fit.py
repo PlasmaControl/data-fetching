@@ -1,6 +1,248 @@
 #-*-Python-*-
 # Created by logannc at 20 Mar 2017  15:42
 
+#from numpy import linspace, atleast_1d
+import numpy as np
+from scipy import interpolate
+import scipy.signal
+
+class interp1e(interpolate.interp1d):
+    """
+    Shortcut for scipy.interpolate.interp1d with fill_value='extrapolate' and bounds_error=False as defaults
+    """
+    __doc__ += interpolate.interp1d.__doc__.replace('\n    ----------\n', ':\n').replace('\n    -------\n', ':\n').replace('\n    --------\n', ':\n')
+
+    def __init__(self, x, y, *args, **kw):
+        kw.setdefault('fill_value', 'extrapolate')
+        kw.setdefault('bounds_error', False)
+        interpolate.interp1d.__init__(self, x, y, *args, **kw)
+
+def smooth(x, window_len=11, window='hanning', axis=0):
+    """smooth the data using a window with requested size.
+
+    This method is based on the convolution of a scaled window with the signal.
+    The signal is prepared by introducing reflected copies of the signal
+    (with the window size) in both ends so that transient parts are minimized
+    in the beginning and end part of the output signal.
+
+    input:
+        :param x: the input signal
+        :param window_len: the dimension of the smoothing window; should be an odd integer; is ignored if `window` is an array
+        :param window: the window function to use, see scipy.signal.get_window documentation for list of available windows
+                'flat' or 'boxcar' will produce a moving average smoothing
+                Can also be an array, in which case it is used as the window function and `window_len` is ignored
+        :param axis: The axis that is smoothed
+
+    output:
+        the smoothed signal
+
+    :Examples:
+
+    >> t=np.linspace(-2,2,100)
+    >> x=np.sin(t)+randn(len(t))*0.1
+    >> y=smooth(x,11)
+
+    see also:
+
+    scipy.signal.get_window, np.convolve, scipy.signal.lfilter
+    """
+    def smooth1d(x, win):
+        window_len = win.size
+        s = np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
+        y = np.convolve(win/win.sum(), s, mode='valid')
+        start = int(np.ceil(window_len/2.)-1)
+        stop = start+len(x)
+        return y[start:stop]
+
+    window_len = int(window_len)
+    if window_len < 3:
+        return x
+    if window == 'flat': # backwards compatibility
+        window = 'boxcar'
+    if isinstance(window, str) or isinstance(window, tuple):
+        if window_len%2 == 0: # Use odd-length window to avoid shifting data
+            window_len += 1
+        win = scipy.signal.get_window(window, window_len, fftbins=False)
+    else:
+        win = np.asarray(window)
+        if len(win.shape) != 1:
+            raise ValueError('window must be 1-D')
+    if x.shape[axis] < win.size:
+        raise ValueError("Input vector needs to be bigger than window length "
+                         "of {}".format(win.size))
+
+    return np.apply_along_axis(smooth1d, axis, x, win)
+
+class UncertainRBF(object):
+    r"""
+    A class for radial basis function fitting of n-dimensional uncertain scattered data
+
+    Parameters:
+
+    :param \*args: arrays `x, y, z, ..., d, e` where
+                 `x, y, z, ...` are the coordinates of the nodes
+                 `d` is the array of values at the nodes, and
+                 `e` is the standard deviation error of the values at the nodes
+
+    :param centers: None the RBFs are centered on the input data points (can be very expensive for large number of nodes points)
+                    -N: N nodes randomly distributed in the domain
+                    N: N*N nodes uniformly distributed in the domain
+                    np.array(N,X): user-defined array with X coordinates of the N nodes
+
+    :param epsilon: float Adjustable constant for gaussian - defaults to approximate average distance between nodes
+
+    :param function: 'multiquadric': np.sqrt((r / self.epsilon) ** 2 + 1)   #<--- default
+                     'inverse': 1.0 / np.sqrt((r / self.epsilon) ** 2 + 1)
+                     'gaussian': np.exp(-(r**2 / self.epsilon))
+                     'linear': r
+                     'cubic': r ** 3
+                     'quintic': r ** 5
+                     'thin_plate': r ** 2 * np.log(r)
+
+    :param norm: default "distance" is the euclidean norm (2-norm)
+
+    :Examples:
+
+    >>> x=np.linspace(0,1,21)
+    >>> y=np.linspace(0,1,21)
+    >>> e=x*0+.5
+    >>> e[abs(x-0.5)<0.1]=8
+    >>> y[abs(x-0.5)<0.1]=10
+    >>>
+    >>> x1 = np.linspace(0,1,100)
+    >>> y1 = UncertainRBF(x, y, e, centers=None, epsilon=1)(x1)
+    >>> y0 = UncertainRBF(x, y, e*0+1, centers=None, epsilon=1)(x1)
+    >>>
+    >>> plt.subplot(2,2,1)
+    >>> errorbar(x,y,e,ls='',marker='.',label='raw 1D data')
+    >>> uband(x1,y1,label='1D RBF w/ uncertainty')
+    >>> plt.plot(x1,nominal_values(y0),label='1D RBF w/o uncertainty')
+    >>> plt.title('1D')
+    >>> legend(loc=0)
+    >>>
+    >>> x = np.random.rand(1000)*4.0-2.0
+    >>> y = np.random.rand(1000)*4.0-2.0
+    >>> e = np.random.rand(1000)
+    >>> z = x*np.exp(-x**2-y**2)
+    >>> ti = np.linspace(-2.0, 2.0, 100)
+    >>> XI, YI = np.meshgrid(ti, ti)
+    >>>
+    >>> rbf = UncertainRBF(x, y, z+e, abs(e), centers=5, epsilon=1)
+    >>> ZI = nominal_values(rbf(XI, YI))
+    >>>
+    >>> rbf = UncertainRBF(x, y, z+e, abs(e)*0+1, centers=5, epsilon=1)
+    >>> ZC = nominal_values(rbf(XI, YI))
+    >>>
+    >>> plt.subplot(2,2,3)
+    >>> plt.scatter(x, y, c=z, s=100, edgecolor='none')
+    >>> plt.xlim(-2, 2)
+    >>> plt.ylim(-2, 2)
+    >>> plt.colorbar()
+    >>> plt.title('raw 2D data (w/o noise)')
+    >>>
+    >>> plt.subplot(2,2,2)
+    >>> plt.pcolor(XI, YI, ZI)
+    >>> plt.xlim(-2, 2)
+    >>> plt.ylim(-2, 2)
+    >>> plt.colorbar()
+    >>> plt.title('2D RBF w/ uncertainty')
+    >>>
+    >>> plt.subplot(2,2,4)
+    >>> plt.pcolor(XI, YI, ZC)
+    >>> plt.xlim(-2, 2)
+    >>> plt.ylim(-2, 2)
+    >>> plt.colorbar()
+    >>> plt.title('2D RBF w/o uncertainty')
+    """
+
+    def __init__(self, x, d, e, centers=None, function='multiquadric', epsilon=None, norm=None):
+        #import pdb; pdb.set_trace()
+        if not np.all([xx.shape == d.shape for xx in x]) and (e.shape == d.shape):
+            raise ValueError("Array lengths must be equal")
+
+        # npts by ndim
+        self.xi = np.asarray([np.asarray(a, dtype=np.float_).flatten() for a in x]).T
+        self.di = np.atleast_2d(np.asarray(d).flatten()).T
+        self.ei = np.atleast_2d(np.asarray(e).flatten()).T
+
+        self.indim = self.xi.shape[1]
+        self.outdim = self.di.shape[1]
+
+        if centers is None:
+            self.centers=self.xi
+        elif np.iterable(centers):
+            self.centers=centers
+        elif centers>0:
+            self.centers=np.array([x.flatten() for x in meshgrid(*[np.linspace(min(self.xi[:,k]),max(self.xi[:,k]),centers) for k in  range(self.indim)])]).T
+        else:
+            self.centers=np.array([np.random.uniform(min(self.xi[i]), max(self.xi[i]), self.indim) for i in range(abs(centers))])
+        self.numCenters = self.centers.shape[0]
+        self.centers = self.centers.T # ndim by numcenters
+
+        # default "distance" is the euclidean norm (2-norm)
+        if norm is None:
+            self.norm = lambda ctrs, pts: np.linalg.norm(ctrs[:,np.newaxis,...] - pts[...,np.newaxis], axis=0)
+        else:
+            self.norm = norm
+
+        self.epsilon = epsilon
+        if self.epsilon is None:
+            # default epsilon is the "the average distance between nodes" based on a bounding hypercube
+            dim = self.xi.shape[0]
+            ximax = np.max(self.xi, axis=1)
+            ximin = np.min(self.xi, axis=1)
+            edges = ximax-ximin
+            edges = edges[np.nonzero(edges)]
+            if not len(edges):
+                self.epsilon = (np.max(self.xi)-np.min(self.xi))/self.xi.size
+            else:
+                self.epsilon = 1./np.power(np.prod(edges)/self.indim, 1.0/edges.size)
+
+        # function options
+        function_options = {'multiquadric': lambda r: np.sqrt((r / self.epsilon) ** 2 + 1),
+                            'inverse': lambda r: 1.0 / np.sqrt((r / self.epsilon) ** 2 + 1),
+                            'gaussian': lambda r: np.exp(-(r**2 / self.epsilon)),
+                            'linear': lambda r: r,
+                            'cubic': lambda r: r ** 3,
+                            'quintic': lambda r: r ** 5,
+                            'thin_plate': lambda r: r ** 2 * np.log(r)}
+        if isinstance(function, str):
+            self.fun = function_options[function]  # demands it be one of the defined keys
+        else:
+            self.fun = function
+
+        G = self._calcAct(self.xi.T)
+        import pdb; pdb.set_trace()
+        D = np.linalg.pinv(np.matrix(G/self.ei[np.newaxis,:]))
+        self.Wd = np.dot(D, self.di/self.ei)
+        self.We = np.dot(D, self.ei*0+1.)
+
+    def _calcAct(self, X):
+        """
+        Calculate the radial basis function of "radius" between points X and the centers.
+
+        :param X: np.ndarray. Shape (ndims, npts)
+
+        :return: np.ndarray. Shape (npts, numcenters)
+        """
+        return self.fun(self.norm(self.centers, X))
+
+    def __call__(self, *args):
+        r"""
+        evaluate interpolation at coordinates
+
+        :param \*args: arrays `x, y, z, ...` the coordinates of the nodes
+
+        :return: uncertain array, of the same shape of coordinates
+        """
+        args = [np.asarray(x) for x in args]
+        if not np.all([x.shape == y.shape for x in args for y in args]):
+            raise ValueError("Array lengths must be equal")
+        shp = args[0].shape
+        X = np.asarray([a.flatten() for a in args], dtype=np.float_) # ndim, npts
+        G = self._calcAct(X)
+
+        return uarray(np.array(np.dot(G, self.Wd)),np.array(abs(np.dot(G, self.We)))).reshape(shp)
 
 def fit_rbf(x0, t0, y0, e0,
             x_out, t_out,
@@ -35,8 +277,17 @@ def fit_rbf(x0, t0, y0, e0,
     """
 
     # basic variables
-    x_out = atleast_1d(x_out)
-    t_out = atleast_1d(t_out)
+    x_out = np.atleast_1d(x_out)
+    #
+    #import pdb; pdb.set_trace()
+    t0 = np.tile(t0,(x0.shape[0],1))
+    
+    x0 = x0.T
+    t0 = t0.T
+    y0 = y0.T
+    e0 = e0.T
+    #import pdb; pdb.set_trace()
+    t_out = np.atleast_1d(t_out)
     missing_times = []
 
     if symmetry:
@@ -57,25 +308,26 @@ def fit_rbf(x0, t0, y0, e0,
         x_out_mod = x_out * 1.0
         x_out_correction = np.ones((t_out.shape[0], x_out.shape[0]))
         smooth_window = int(5 * 30. / centers_per_slice) * 2 + 1
-        grid = linspace(np.nanmin(x0), np.nanmax(x0), 200)
+        grid = np.linspace(np.nanmin(x0), np.nanmax(x0), 200)
         for itime, time in enumerate(t_out):
-            i = where(t0 == time)[0]
+            i = np.where(t0 == time)[0]
             if len(i)==0:
                 # Keep track of time indices that are missing data, and assign `nan`
                 missing_times.append(itime)
                 continue
-            x0_, y0_ = x0[i], y0[i]
-            j = argsort(x0_)
+            #import pdb; pdb.set_trace()
+            x0_, y0_ = np.ndarray.flatten(x0[i]), np.ndarray.flatten(y0[i])
+            j = np.argsort(x0_)
             # stretch x where |dy/dx| is large
             y_grid = interp1e(x0_[j], y0_[j])(grid)
-            xsign = sign(grid)
+            xsign = np.sign(grid)
             xsign[xsign == 0] = 1
-            dys = cumsum(smooth(xsign * abs(gradient(y_grid)), smooth_window))
+            dys = np.cumsum(smooth(xsign * np.abs(np.gradient(y_grid)), smooth_window))
             # normalize
             dys = 1 + (dys - min(dys)) / (max(dys) - min(dys))
             dys /= interp1e(grid, dys)(1)
             # extra edge bias
-            dys = dys ** (1. + sqrt(xbias_power))
+            dys = dys ** (1. + np.sqrt(xbias_power))
             x_in_mod[i] *= interp1e(grid, dys)(x0[i])
             x_out_correction[itime] = interp1e(grid, dys)(x_out)
         xmin, xmax = np.min(x_out_correction * x_out), np.max(x_out_correction * x_out)
@@ -97,13 +349,14 @@ def fit_rbf(x0, t0, y0, e0,
         centers_per_slice*=2
 
     # automatic distribution of basis function centers evenly in x at every time
-    centers = linspace(min(x_in_mod), max(x_in_mod), centers_per_slice)
+#    import pdb; pdb.set_trace()
+    centers = np.linspace(np.amin(x_in_mod), np.amax(x_in_mod), centers_per_slice)
     eps = centers[1] - centers[0]
-    centers = array([x.flatten() for x in meshgrid(unique(t0)[::], centers)]).T
+    centers = np.array([x.flatten() for x in np.meshgrid(np.unique(t0)[::], centers)]).T
 
     # make the rbf and interpolate
     rbf = UncertainRBF((t0, x_in_mod), y0, e0, epsilon=eps, centers=centers, function=function)
-    xgrid, tgrid = meshgrid(x_out_mod, tnorm * t_out)
+    xgrid, tgrid = np.meshgrid(x_out_mod, tnorm * t_out)
     if interp_and_smooth:
         xgrid = xnorm * x_out_correction * x_out
     y_out = rbf(tgrid, xgrid)
@@ -169,9 +422,9 @@ def fit_biasedrbf(x0, t0, y0, e0, x_out, t_out, xbias_position=0.98, xbias_width
     x_out_mod *= xnorm
 
     # automatic distribution of basis function centers evenly in x at every time
-    centers = linspace(np.min(x_out_mod), np.max(x_out_mod), centers_per_slice)
+    centers = np.linspace(np.min(x_out_mod), np.max(x_out_mod), centers_per_slice)
     eps = centers[1] - centers[0]
-    centers = array([x.flatten() for x in meshgrid(unique(t0)[::], centers)]).T
+    centers = array([x.flatten() for x in meshgrid(np.unique(t0)[::], centers)]).T
 
     # make the rbf and interpolate
     rbf = UncertainRBF((t0, x_in_mod), y0, e0, epsilon=eps, centers=centers, function=function)
@@ -193,7 +446,7 @@ def fit_biasedrbf(x0, t0, y0, e0, x_out, t_out, xbias_position=0.98, xbias_width
 
 def GAPSpline(x_fit, x, y, ye, set_autoknot=True, num_knots=3, knot_locs=None,
              set_onAxis_value=False, onAxis_value='free', set_Boundary=False, boundary_value='free',
-             set_edgeSlope=False, edgeSlope_value='free', set_fitEdge='fit', set_allowneg=True, fill_value=nan):
+             set_edgeSlope=False, edgeSlope_value='free', set_fitEdge='fit', set_allowneg=True, fill_value=np.nan):
     """
     Function wrapper that runs a remote IDL season GAprofiles spline fit and returns a modified interpolation
     object with methods to get the basic spline info.

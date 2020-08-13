@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('/Users/josephabbate/Documents/research/fitting/lib')
-from mtanh_fit import *
+from mtanh_fit import real_to_psi_profile
+#from rbf_fit import real_to_psi_profile
+from plot_tools import plot_fit
 
 cer_type='cerquick'
 efit_type='EFIT01'
@@ -38,19 +40,6 @@ def standardize_time(old_signal,old_timebase):
         else:
             new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
     return new_signal
-
-def plot_fit(signal,standard_psi,psi,value,uncertainty):
-    max_uncertainty=np.nanmax(uncertainty)
-    for ind in range(signal.shape[0]):
-        plt.plot(standard_psi, signal[ind], c='r')
-        plt.errorbar(psi[:,ind],
-                     value[:,ind],
-                     np.clip(uncertainty[:,ind],0,max_uncertainty),
-                     ls='None')
-        plt.xlabel('psi')
-        plt.ylabel(final_sig_name)
-        plt.title('{}ms'.format(standard_times[ind]))
-        plt.show()
 
 final_data={}
 for shot in data.keys():
@@ -116,7 +105,7 @@ for shot in data.keys():
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty)
+            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty,standard_times,final_sig_name)
 
     # Thomson
     for signal in thomson_sigs:
@@ -153,7 +142,7 @@ for shot in data.keys():
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty)
+            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty, standard_times, final_sig_name)
     
 with open('final_data_batch_{}.pkl'.format(batch_num),'wb') as f:
     pickle.dump(final_data,f)

@@ -3,8 +3,6 @@ import sys
 sys.path.append('/Users/josephabbate/Documents/research/fitting/astrolibpy/mpfit')
 from mpfit import mpfit
 
-import matplotlib.pyplot as plt
-
 def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out):
     p0=np.array([1.0, 3.0, 0.01, 1.0, 0.01],dtype='float64')  #initial conditions
 
