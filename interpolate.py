@@ -18,13 +18,13 @@ cer_sigs=['temp','rotation']
 scalar_sigs=['curr']
 
 debug=True
-debug_sig='cer_temp_{}'.format(efit_type)
+debug_sig='thomson_dens_{}'.format(efit_type)
 debug_shot=163303
 
 batch_num=0
 
-time_base=50
-time_step=time_base
+time_base=100
+time_step=50
 
 standard_psi=np.linspace(0,1,65)
 
@@ -105,7 +105,7 @@ for shot in data.keys():
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty,standard_times,final_sig_name)
+            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty,standard_times,final_sig_name,max_uncertainty)
 
     # Thomson
     for signal in thomson_sigs:
@@ -135,14 +135,14 @@ for shot in data.keys():
         psi=np.array(psi)
         uncertainty=np.array(uncertainty)
         max_uncertainty=np.nanmax(uncertainty)
-        uncertainty[np.isclose(value,0)]=1e30
-        uncertainty[np.isclose(uncertainty,0)]=1e30
+        value[np.isclose(value,0)]=np.nan
+        value[np.isclose(uncertainty,0)]=np.nan
 
         final_sig_name='thomson_{}_{}'.format(signal,efit_type)
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty, standard_times, final_sig_name)
+            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty, standard_times, final_sig_name, max_uncertainty)
     
 with open('final_data_batch_{}.pkl'.format(batch_num),'wb') as f:
     pickle.dump(final_data,f)

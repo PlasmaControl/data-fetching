@@ -18,18 +18,19 @@ def move_slice(ax, shift):
     plot_slice(ax) #ax.images[0].set_array(volume[ax.index])
 
 def plot_slice(ax):
-    max_uncertainty=min(np.nanmax(ax.uncertainty),6)
+    max_uncertainty=ax.max_uncertainty
     ax.plot(ax.standard_psi, ax.signal[ax.index], c='r')
     ax.errorbar(ax.psi[:,ax.index],
-                 ax.value[:,ax.index],
-                 np.clip(ax.uncertainty[:,ax.index],0,max_uncertainty),
-                 ls='None')
-    plt.xlabel('psi')
-    plt.ylabel(ax.final_sig_name)
-    plt.title('{}ms'.format(ax.standard_times[ax.index]))
+                ax.value[:,ax.index],
+                np.clip(ax.uncertainty[:,ax.index],0,max_uncertainty),
+                ls='None')
+    ax.set_xlabel('psi')
+    ax.set_ylabel(ax.final_sig_name)
+    ax.set_ylim((0,8))
+    ax.set_title('{}ms'.format(ax.standard_times[ax.index]))
     
                
-def plot_fit(signal,standard_psi,psi,value,uncertainty,standard_times,final_sig_name):
+def plot_fit(signal,standard_psi,psi,value,uncertainty,standard_times,final_sig_name,max_uncertainty):
     fig, ax = plt.subplots()
     ax.final_sig_name=final_sig_name
     ax.index=0
@@ -39,6 +40,7 @@ def plot_fit(signal,standard_psi,psi,value,uncertainty,standard_times,final_sig_
     ax.psi=psi
     ax.value=value
     ax.uncertainty=uncertainty
+    ax.max_uncertainty=max_uncertainty
     plot_slice(ax)
     fig.canvas.mpl_connect('key_press_event', process_key)
     plt.show()
