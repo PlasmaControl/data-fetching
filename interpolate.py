@@ -15,15 +15,23 @@ efit_type='EFIT01'
 
 thomson_sigs=['temp','dens']
 cer_sigs=['temp','rotation']
-scalar_sigs=['curr']
+scalar_sigs=['bmspinj15L', 'bmspinj21L', 'bmspinj30L',
+             'bmspinj33L', 'bmspinj15R', 'bmspinj21R',
+             'bmspinj30R', 'bmspinj33R', 'bmstinj15L',
+             'bmstinj21L', 'bmstinj30L', 'bmstinj33L',
+             'bmstinj15R', 'bmstinj21R', 'bmstinj30R',
+             'bmstinj33R']
+transp_sigs=['PBI']
+include_psirz=True
 
 debug=True
-debug_sig='thomson_dens_{}'.format(efit_type)
+debug_sig= 'thomson_temp_{}'.format(efit_type) #'transp_PBI'
 debug_shot=163303
 
 batch_num=0
 
-time_base=100
+time_base=200
+#falloff=50
 time_step=50
 
 standard_psi=np.linspace(0,1,65)
@@ -38,6 +46,11 @@ def standardize_time(old_signal,old_timebase):
         if len(inds_in_range)==0:
             new_signal.append(np.nan)
         else:
+            #weights=np.array([np.exp(- (standard_times[i]-old_timebase[ind]) / falloff) for ind in inds_in_range])
+            #plt.plot(old_timebase[inds_in_range],weights)
+            #plt.show()
+            #weights/=sum(weights)
+            #new_signal.append(np.sum(np.tensordot(old_signal[inds_in_range],weights,axes=0)[0],axis=0))
             new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
     return new_signal
 
@@ -45,7 +58,7 @@ final_data={}
 for shot in data.keys():
     min_time=max(data[shot]['t_ip_flat'],
                  min(data[shot][efit_type]['time']))
-    min_time+=time_base
+    #min_time+=time_base
     max_time=min(data[shot]['t_ip_flat']+data[shot]['ip_flat_duration'],
                  max(data[shot][efit_type]['time']))
     standard_times=np.arange(min_time,max_time,time_step)
@@ -66,6 +79,11 @@ for shot in data.keys():
             plt.show()
 
     psirz=standardize_time(data[shot][efit_type]['psi_grid'],data[shot][efit_type]['time'])
+    rho=standardize_time(data[shot][efit_type]['rho_grid'],data[shot][efit_type]['time'])
+
+    if include_psirz:
+        final_data[shot]['psirz']=psirz
+        
     get_psi=[interpolate.interp2d(data[shot][efit_type]['R'],data[shot][efit_type]['Z'],psirz[time_ind]) for time_ind in range(len(standard_times))]
 
     # CER
@@ -105,7 +123,15 @@ for shot in data.keys():
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty,standard_times,final_sig_name,max_uncertainty)
+            plot_fit(signal=final_data[shot][final_sig_name],
+                     standard_psi=standard_psi,
+                     final_sig_name=final_sig_name,
+                     standard_times=standard_times,
+                     ylims=(0,np.amax(final_data[shot][final_sig_name])),
+                     value=value,
+                     psi=psi,
+                     uncertainty=uncertainty,
+                     max_uncertainty=max_uncertainty)
 
     # Thomson
     for signal in thomson_sigs:
@@ -142,7 +168,41 @@ for shot in data.keys():
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(final_data[shot][final_sig_name],standard_psi,psi,value,uncertainty, standard_times, final_sig_name, max_uncertainty)
-    
+            plot_fit(signal=final_data[shot][final_sig_name],
+                     standard_psi=standard_psi,
+                     final_sig_name=final_sig_name,
+                     standard_times=standard_times,
+                     ylims=(0,np.amax(final_data[shot][final_sig_name])),
+                     value=value,
+                     psi=psi,
+                     uncertainty=uncertainty,
+                     max_uncertainty=max_uncertainty)
+
+    if 'transp' in data[shot]:
+        transp_rho=data[shot]['transp']['beam_rho']
+        for signal in transp_sigs:
+            final_sig_name='transp_{}'.format(signal)
+            final_data[shot][final_sig_name]=[]
+#            print(data[shot]['transp'][signal].shape)
+            transp_data=standardize_time(data[shot]['transp'][signal],data[shot]['transp']['beam_time']*1000)
+#            import pdb; pdb.set_trace()
+            for time_ind in range(len(standard_times)):                
+                rho_to_transp=interpolate.interp1d(transp_rho,
+                                                   transp_data[time_ind],
+                                                   bounds_error=False,
+                                                   fill_value=(transp_data[time_ind][np.argmin(transp_rho)],transp_data[time_ind][np.argmax(transp_rho)]))
+                final_data[shot][final_sig_name].append(rho_to_transp(rho[time_ind]))
+            final_data[shot][final_sig_name]=np.array(final_data[shot][final_sig_name])
+            if debug and debug_sig==final_sig_name and debug_shot==shot:
+                plot_fit(signal=final_data[shot][final_sig_name],
+                         standard_psi=standard_psi,
+                         final_sig_name=final_sig_name,
+                         standard_times=standard_times,
+                         ylims=(np.amin(final_data[shot][final_sig_name]),np.amax(final_data[shot][final_sig_name])),
+                         value=None,
+                         psi=None,
+                         uncertainty=None,
+                         max_uncertainty=None)
+                
 with open('final_data_batch_{}.pkl'.format(batch_num),'wb') as f:
     pickle.dump(final_data,f)
