@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('/Users/josephabbate/Documents/research/fitting/lib')
-from mtanh_fit import real_to_psi_profile
-#from rbf_fit import real_to_psi_profile
-from plot_tools import plot_fit
+#from mtanh_fit import real_to_psi_profile
+from rbf_fit import real_to_psi_profile
+from plot_tools import plot_comparison_over_time
 
 cer_type='cerquick'
 efit_type='EFIT01'
@@ -25,7 +25,7 @@ transp_sigs=['PBI']
 include_psirz=True
 
 debug=True
-debug_sig= 'thomson_temp_{}'.format(efit_type) #'transp_PBI'
+debug_sig='transp_PBI' #'thomson_dens_{}'.format(efit_type) 
 debug_shot=163303
 
 batch_num=0
@@ -123,15 +123,14 @@ for shot in data.keys():
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(signal=final_data[shot][final_sig_name],
-                     standard_psi=standard_psi,
-                     final_sig_name=final_sig_name,
-                     standard_times=standard_times,
-                     ylims=(0,np.amax(final_data[shot][final_sig_name])),
-                     value=value,
-                     psi=psi,
-                     uncertainty=uncertainty,
-                     max_uncertainty=max_uncertainty)
+            uncertainty=np.clip(uncertainty.T,0,max_uncertainty)
+            plot_comparison_over_time(xlist=(psi.T,standard_psi),
+                                      ylist=(value.T,final_data[shot][final_sig_name]), 
+		                      time=standard_times,
+                	              ylabel=final_sig_name,
+                	              xlabel='psi',
+                	              uncertaintylist=(uncertainty,None),
+                                      labels=('data','original'))
 
     # Thomson
     for signal in thomson_sigs:
@@ -168,24 +167,20 @@ for shot in data.keys():
         final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_fit(signal=final_data[shot][final_sig_name],
-                     standard_psi=standard_psi,
-                     final_sig_name=final_sig_name,
-                     standard_times=standard_times,
-                     ylims=(0,np.amax(final_data[shot][final_sig_name])),
-                     value=value,
-                     psi=psi,
-                     uncertainty=uncertainty,
-                     max_uncertainty=max_uncertainty)
+            plot_comparison_over_time(xlist=(psi.T,standard_psi),
+                                      ylist=(value.T,final_data[shot][final_sig_name]), 
+		                      time=standard_times,
+                	              ylabel=final_sig_name,
+                	              xlabel='psi',
+                	              uncertaintylist=(uncertainty.T,None),
+                                      labels=('data','original'))
 
     if 'transp' in data[shot]:
         transp_rho=data[shot]['transp']['beam_rho']
         for signal in transp_sigs:
             final_sig_name='transp_{}'.format(signal)
             final_data[shot][final_sig_name]=[]
-#            print(data[shot]['transp'][signal].shape)
             transp_data=standardize_time(data[shot]['transp'][signal],data[shot]['transp']['beam_time']*1000)
-#            import pdb; pdb.set_trace()
             for time_ind in range(len(standard_times)):                
                 rho_to_transp=interpolate.interp1d(transp_rho,
                                                    transp_data[time_ind],
@@ -193,16 +188,15 @@ for shot in data.keys():
                                                    fill_value=(transp_data[time_ind][np.argmin(transp_rho)],transp_data[time_ind][np.argmax(transp_rho)]))
                 final_data[shot][final_sig_name].append(rho_to_transp(rho[time_ind]))
             final_data[shot][final_sig_name]=np.array(final_data[shot][final_sig_name])
+
             if debug and debug_sig==final_sig_name and debug_shot==shot:
-                plot_fit(signal=final_data[shot][final_sig_name],
-                         standard_psi=standard_psi,
-                         final_sig_name=final_sig_name,
-                         standard_times=standard_times,
-                         ylims=(np.amin(final_data[shot][final_sig_name]),np.amax(final_data[shot][final_sig_name])),
-                         value=None,
-                         psi=None,
-                         uncertainty=None,
-                         max_uncertainty=None)
-                
+                plot_comparison_over_time(xlist=[standard_psi],
+                                          ylist=[final_data[shot][final_sig_name]],
+		                          time=standard_times,
+                	                  ylabel=final_sig_name,
+                	                  xlabel='psi',
+                	                  uncertaintylist=None,
+                                          labels=None)
+                                
 with open('final_data_batch_{}.pkl'.format(batch_num),'wb') as f:
     pickle.dump(final_data,f)
