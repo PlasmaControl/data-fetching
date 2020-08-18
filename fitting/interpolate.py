@@ -4,11 +4,15 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
+import os
 import sys
-sys.path.append('/Users/josephabbate/Documents/research/fitting/lib')
+
+sys.path.append(os.path.join(os.path.dirname(__file__),'..','lib'))
 #from mtanh_fit import real_to_psi_profile
 from rbf_fit import real_to_psi_profile
 from plot_tools import plot_comparison_over_time
+
+data_dir=os.path.join(os.path.dirname(__file__))
 
 cer_type='cerquick'
 efit_type='EFIT01'
@@ -36,7 +40,7 @@ time_step=50
 
 standard_psi=np.linspace(0,1,65)
 
-with open('final_data_full_batch_{}.pkl'.format(batch_num),'rb') as f:
+with open(os.path.join(data_dir,'final_data_full_batch_{}.pkl'.format(batch_num)),'rb') as f:
     data=pickle.load(f)
 
 def standardize_time(old_signal,old_timebase):
@@ -198,5 +202,5 @@ for shot in data.keys():
                 	                  uncertaintylist=None,
                                           labels=None)
                                 
-with open('final_data_batch_{}.pkl'.format(batch_num),'wb') as f:
+with open(os.path.join(data_dir,'final_data_batch_{}.pkl'.format(batch_num)),'wb') as f:
     pickle.dump(final_data,f)

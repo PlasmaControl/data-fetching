@@ -66,7 +66,7 @@ def plot_comparison_over_time(xlist, ylist, time,
     ymax=max([np.nanmax(y) for y in ylist])
 
     fig, ax = plt.subplots()
-    ax.xlist=xlist
+    ax.xlist=xlist 
     ax.ylist=ylist
     ax.time=time
     ax.uncertaintylist=uncertaintylist
