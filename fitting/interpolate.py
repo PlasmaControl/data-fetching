@@ -12,7 +12,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__),'..','lib'))
 from rbf_fit import real_to_psi_profile
 from plot_tools import plot_comparison_over_time
 
-data_dir=os.path.join(os.path.dirname(__file__))
+data_dir=os.path.join(os.path.dirname(__file__),'..','data')
 
 cer_type='cerquick'
 efit_type='EFIT01'

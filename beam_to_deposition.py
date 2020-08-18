@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__),'lib'))
 from plot_tools import plot_comparison_over_time
-from transport_helpers import get_volume
+from transport_helpers import get_volume, get_sigma
 
-data_dir=os.path.join(os.path.dirname(__file__),'fitting')
+data_dir=os.path.join(os.path.dirname(__file__),'data')
 with open(os.path.join(data_dir,'final_data_full_batch_0.pkl'),'rb') as f:
     full_data=pickle.load(f)
 with open(os.path.join(data_dir,'final_data_batch_0.pkl'),'rb') as f:
@@ -79,10 +79,6 @@ efit_type='EFIT01'
 beam='30L'
 (points,volume)=rt_and_angle_to_r_and_z(tangencies[beam],angles[beam])
 
-#$\sigma$ is a factor of $10^{-16}$ $cm^2$, i.e. $10^{-20}$ $m^3$.
-# And our density is in units of $10^{19}$ $m^3$.
-# So ultimately $\sigma$ in the code is a factor of $.1$
-
 standard_psi=np.linspace(0,1,65)
 deposition_psi=np.linspace(0,1,20)
 depositions={}
@@ -102,6 +98,8 @@ for beam in beams:
                                         data[shot]['psirz'][time_ind])
         psi_to_density=interpolate.interp1d(standard_psi,
                                             data[shot]['thomson_dens_{}'.format(efit_type)][time_ind])
+        psi_to_temp=interpolate.interp1d(standard_psi,
+                                            data[shot]['thomson_temp_{}'.format(efit_type)][time_ind])
         iBeam=np.zeros(len(points))
         iBeam[0]=iBeam0[time_ind]
 
@@ -111,8 +109,12 @@ for beam in beams:
             psi=r_z_to_psi(r,z)
             if psi<1:
                 psi_index=np.searchsorted(deposition_psi,psi)
-                sigma=.2 #1e-15/1e3
-                lambdaP=1/(psi_to_density(psi)*sigma)
+                # get_sigma returns cm^2
+                sigma=get_sigma(ne=psi_to_density(psi),
+                                Te=psi_to_temp(psi))
+                # density is 10^19 m^-3 and sigma is cm^2
+                # so lambdaP is in 10^-15 m
+                lambdaP=1/(psi_to_density(psi)*sigma) * 1e-15
                 diBeam=( -iBeam[point_ind] / lambdaP ) * volume
                 deposition[time_ind][psi_index] -= diBeam
                 iBeam[point_ind+1] = iBeam[point_ind] + diBeam
@@ -137,4 +139,4 @@ plot_comparison_over_time(xlist=(standard_psi,deposition_psi),
                           ylabel='PBI (W/cm^3)',
                           xlabel='psi',
                           uncertaintylist=None,
-                          labels=('transp_PBI','joe_PBI'))
+                          labels=('NUBEAM','DUMBBEAM'))

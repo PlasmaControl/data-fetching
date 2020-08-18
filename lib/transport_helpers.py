@@ -40,5 +40,85 @@ def get_volume(r,z,psi_grid,basis_psi):
         #     psi_gradient+=np.square(gradient[0][r_ind][z_ind])+np.square(gradient[1][r_ind][z_ind])
         # G1[i]=psi_gradient/len(hull[0])
 
+# from Janev's 1989 "Penetration of energetic neutral beams into fusion plasmas"
+# ne is to be in 10^19 m^-3, Te in keV, E in keV/u
+def get_sigma(ne,Te,E=75,Z=2):
     
+    def S1(E,ne,Te):
+        A=[[[4.4,-2.49e-2],[7.46e-2,2.27e-3],[3.16e-3,-2.78e-5]],
+           [[2.3e-1,-1.15e-2],[-2.55e-3,-6.2e-4],[1.32e-3,3.38e-5]]]
+        # 10^13 cm^-3 in paper, so (since we deal in 10^19 m^-3) 
+        # we just have n0=1
 
+        ret=0
+        for i in range(2):
+            for j in range(3):
+                for k in range(2):
+                    ret+=A[i][j][k] \
+                        *np.power(np.log(E),i) \
+                        *np.power(np.log(ne),j) \
+                        *np.power(np.log(Te),k)
+        return ret
+
+    def Sz(E,ne,Te,impurity='C'):
+        # we just have the numbers for C impurity here
+        B={'C':[[[-1.49,-1.54e-2],[-1.19e-1,-1.5e-2]],
+                [[5.18e-1,7.18e-3],[2.92e-2,3.66e-3]],
+                [[-3.36e-2,3.41e-4],[-1.79e-3,-2.04e-4]]]}
+
+        ret=0
+        for i in range(3):
+            for j in range(2):
+                for k in range(2):
+                    ret+=B[impurity][i][j][k] \
+                        *np.power(np.log(E),i) \
+                        *np.power(np.log(ne),j) \
+                        *np.power(np.log(Te),k)
+        return ret
+
+
+    return np.exp(S1(E,ne,Te))/E * ( 1 + (Z-1)*Sz(E,ne,Te) ) * 1e-16
+
+if __name__ == "__main__":
+    '''
+    import matplotlib.pyplot as plt
+    # these are the values from the paper, this plots a comparison to double check
+    # we implemented the right equation 
+    ne=1e14
+    Te=10
+    Z=2
+    E_arr=np.logspace(2,4)
+    sigma=[get_sigma(E,ne,Te,Z) for E in E_arr]
+    plt.loglog([1e2,2e3,1e4],[2.8e-16,4e-17,1e-17],label='estimated paper values for ne=1e14')
+    plt.loglog(E_arr,sigma,label='this code for ne={:.0e}'.format(ne))
+    plt.xlabel('E')
+    plt.ylabel('sigma')
+    plt.legend()
+    plt.show()
+    '''
+    import pickle
+    import os
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__)))
+    from plot_tools import plot_comparison_over_time
+    
+    data_dir=os.path.join(os.path.dirname(__file__),'..','data')
+    with open(os.path.join(data_dir,'final_data_batch_0.pkl'),'rb') as f:
+        data=pickle.load(f)
+
+    shot=163303
+    efit_type='EFIT01'
+    standard_psi=np.linspace(0,1,65)
+    sigma=np.zeros((len(data[shot]['time']), len(standard_psi)))
+    for time_ind in range(len(data[shot]['time'])):
+        for psi_ind in range(len(standard_psi)):
+            sigma[time_ind][psi_ind]=get_sigma(ne=data[shot]['thomson_dens_{}'.format(efit_type)][time_ind][psi_ind],
+                                               Te=data[shot]['thomson_temp_{}'.format(efit_type)][time_ind][psi_ind]) * 1e-4
+
+    plot_comparison_over_time(xlist=[standard_psi],
+                              ylist=[sigma],
+                              time=data[shot]['time'],
+                              ylabel='sigma',
+                              xlabel='psi',
+                              uncertaintylist=None,
+                              labels=None)
