@@ -121,9 +121,9 @@ for beam in beams:
             
     depositions[beam]=deposition
 
-total_depositions=np.zeros(depositions[beams[0]].shape)
+total_deposition=np.zeros(depositions[beams[0]].shape)
 for beam in beams:
-    total_depositions+=depositions[beam]
+    total_deposition+=depositions[beam]
 
 r=full_data[shot]['EFIT01']['R']
 z=full_data[shot]['EFIT01']['Z']
@@ -131,12 +131,25 @@ psi_grid=np.array(data[shot]['psirz'])
 # the 1e6 is because we want volume in cm^3 instead of m^3
 dv=get_volume(r=r,z=z,psi_grid=psi_grid,basis_psi=deposition_psi)*1e6
 
-total_depositions=np.divide(total_depositions,dv)
+data[shot]['depositions']=depositions
+data[shot]['total_deposition']=total_deposition
+data[shot]['dv']=dv
+
+total_deposition=np.divide(total_deposition,dv)
 
 plot_comparison_over_time(xlist=(standard_psi,deposition_psi),
-                          ylist=(data[shot]['transp_PBI'],total_depositions),
+                          ylist=(data[shot]['transp_PBI'],total_deposition),
                           time=data[shot]['time'],
                           ylabel='PBI (W/cm^3)',
                           xlabel='psi',
                           uncertaintylist=None,
                           labels=('NUBEAM','DUMBBEAM'))
+
+with open(os.path.join(data_dir,'final_data_batch_0.pkl'),'wb') as f:
+    data=pickle.dump(data,f)
+
+# with open('beams.pkl','wb') as f:
+#     pickle.dump({'deposition_psi': deposition_psi,
+#                  'total_deposition': total_deposition,
+#                  'dv': dv},
+#                 f)

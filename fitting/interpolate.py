@@ -29,7 +29,7 @@ transp_sigs=['PBI']
 include_psirz=True
 
 debug=True
-debug_sig='transp_PBI' #'thomson_dens_{}'.format(efit_type) 
+debug_sig='thomson_temp_{}'.format(efit_type) 
 debug_shot=163303
 
 batch_num=0
@@ -38,7 +38,10 @@ time_base=200
 #falloff=50
 time_step=50
 
+fit_psi=False
+efit_psi=np.linspace(0,1,65)
 standard_psi=np.linspace(0,1,65)
+standard_rho=np.linspace(.025,.975,20)
 
 with open(os.path.join(data_dir,'final_data_full_batch_{}.pkl'.format(batch_num)),'rb') as f:
     data=pickle.load(f)
@@ -88,7 +91,8 @@ for shot in data.keys():
     if include_psirz:
         final_data[shot]['psirz']=psirz
         
-    get_psi=[interpolate.interp2d(data[shot][efit_type]['R'],data[shot][efit_type]['Z'],psirz[time_ind]) for time_ind in range(len(standard_times))]
+    r_z_to_psi=[interpolate.interp2d(data[shot][efit_type]['R'],data[shot][efit_type]['Z'],psirz[time_ind]) for time_ind in range(len(standard_times))]
+    psi_to_rho=[interpolate.interp1d(efit_psi,data[shot][efit_type]['rho_grid'][time_ind], bounds_error=False) for time_ind in range(len(standard_times))]
 
     # CER
     for signal in cer_sigs:
@@ -114,25 +118,38 @@ for shot in data.keys():
                                               data[shot]['cer'][system][channel][cer_type]['time']))
                     z.append(standardize_time(data[shot]['cer'][system][channel][cer_type]['Z'],
                                               data[shot]['cer'][system][channel][cer_type]['time']))
-                    psi.append([get_psi[time_ind](r[-1][time_ind],z[-1][time_ind])[0] for time_ind in range(len(standard_times))])
+                    psi.append([r_z_to_psi[time_ind](r[-1][time_ind],z[-1][time_ind])[0] for time_ind in range(len(standard_times))])
 
-        value=np.array(value)
-        psi=np.array(psi)
+        value=np.array(value).T
+        psi=np.array(psi).T
         error=np.array(error)
         uncertainty=np.full(np.shape(value),np.nanmean(np.abs(value))*.1)
         max_uncertainty=np.nanmax(uncertainty)*5
         value[np.where(error==1)]=np.nan
 
         final_sig_name='cer_{}_{}'.format(signal,efit_type)
-        final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
+
+        if fit_psi:
+            in_x=psi
+            out_x=standard_psi
+            x_label='psi'
+        else:
+            in_x=[]
+            for time_ind in range(len(standard_times)):
+                in_x.append(psi_to_rho[time_ind](psi[time_ind]))
+            in_x=np.array(in_x)
+            out_x=standard_rho
+            x_label='rho'
+
+        final_data[shot][final_sig_name] = real_to_psi_profile(in_x,standard_times,value,uncertainty, out_x,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            uncertainty=np.clip(uncertainty.T,0,max_uncertainty)
-            plot_comparison_over_time(xlist=(psi.T,standard_psi),
-                                      ylist=(value.T,final_data[shot][final_sig_name]), 
+            uncertainty=np.clip(uncertainty,0,max_uncertainty)
+            plot_comparison_over_time(xlist=(in_x,out_x),
+                                      ylist=(value,final_data[shot][final_sig_name]), 
 		                      time=standard_times,
                 	              ylabel=final_sig_name,
-                	              xlabel='psi',
+                	              xlabel=x_label,
                 	              uncertaintylist=(uncertainty,None),
                                       labels=('data','original'))
 
@@ -156,27 +173,38 @@ for shot in data.keys():
                 if system=='CORE':
                     z=data[shot]['thomson'][system]['Z'].T[channel]
                     r=1.94
-                psi.append([get_psi[time_ind](r,z)[0] for time_ind in range(len(standard_times))])
+                psi.append([r_z_to_psi[time_ind](r,z)[0] for time_ind in range(len(standard_times))])
                 uncertainty.append(standardize_time(data[shot]['thomson'][system][signal+'_uncertainty'].T[channel]/scale[signal],
                                             data[shot]['thomson'][system]['time']))
 
-        value=np.array(value)
-        psi=np.array(psi)
-        uncertainty=np.array(uncertainty)
+        value=np.array(value).T
+        psi=np.array(psi).T
+        uncertainty=np.array(uncertainty).T
         max_uncertainty=np.nanmax(uncertainty)
         value[np.isclose(value,0)]=np.nan
         value[np.isclose(uncertainty,0)]=np.nan
 
         final_sig_name='thomson_{}_{}'.format(signal,efit_type)
-        final_data[shot][final_sig_name] = real_to_psi_profile(psi,standard_times,value,uncertainty, standard_psi,standard_times)
+        if fit_psi:
+            in_x=psi
+            out_x=standard_psi
+            x_label='psi'
+        else:
+            in_x=[]
+            for time_ind in range(len(standard_times)):
+                in_x.append(psi_to_rho[time_ind](psi[time_ind]))
+            in_x=np.array(in_x)
+            out_x=standard_rho
+            x_label='rho'
+        final_data[shot][final_sig_name] = real_to_psi_profile(in_x,standard_times,value,uncertainty,out_x,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
-            plot_comparison_over_time(xlist=(psi.T,standard_psi),
-                                      ylist=(value.T,final_data[shot][final_sig_name]), 
+            plot_comparison_over_time(xlist=(in_x,out_x),
+                                      ylist=(value,final_data[shot][final_sig_name]), 
 		                      time=standard_times,
                 	              ylabel=final_sig_name,
-                	              xlabel='psi',
-                	              uncertaintylist=(uncertainty.T,None),
+                	              xlabel=x_label,
+                	              uncertaintylist=(uncertainty,None),
                                       labels=('data','original'))
 
     if 'transp' in data[shot]:
@@ -185,20 +213,27 @@ for shot in data.keys():
             final_sig_name='transp_{}'.format(signal)
             final_data[shot][final_sig_name]=[]
             transp_data=standardize_time(data[shot]['transp'][signal],data[shot]['transp']['beam_time']*1000)
-            for time_ind in range(len(standard_times)):                
-                rho_to_transp=interpolate.interp1d(transp_rho,
-                                                   transp_data[time_ind],
-                                                   bounds_error=False,
-                                                   fill_value=(transp_data[time_ind][np.argmin(transp_rho)],transp_data[time_ind][np.argmax(transp_rho)]))
-                final_data[shot][final_sig_name].append(rho_to_transp(rho[time_ind]))
-            final_data[shot][final_sig_name]=np.array(final_data[shot][final_sig_name])
+            if fit_psi:
+                for time_ind in range(len(standard_times)):
+                    rho_to_transp=interpolate.interp1d(transp_rho,
+                                                       transp_data[time_ind],
+                                                       bounds_error=False,
+                                                       fill_value=(transp_data[time_ind][np.argmin(transp_rho)],transp_data[time_ind][np.argmax(transp_rho)]))
+                    final_data[shot][final_sig_name].append(rho_to_transp(rho[time_ind]))
+                final_data[shot][final_sig_name]=np.array(final_data[shot][final_sig_name])
+                x_out=standard_psi
+                x_label='psi'
+            else:
+                final_data[shot][final_sig_name]=np.array(transp_data)
+                x_out=transp_rho
+                x_label='rho'
 
             if debug and debug_sig==final_sig_name and debug_shot==shot:
-                plot_comparison_over_time(xlist=[standard_psi],
+                plot_comparison_over_time(xlist=[x_out],
                                           ylist=[final_data[shot][final_sig_name]],
 		                          time=standard_times,
                 	                  ylabel=final_sig_name,
-                	                  xlabel='psi',
+                	                  xlabel=x_label,
                 	                  uncertaintylist=None,
                                           labels=None)
                                 
