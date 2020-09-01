@@ -1,15 +1,30 @@
 import numpy as np
+from scipy import interpolate
 
-def get_volume(r,z,psi_grid,basis_psi):
+def my_interp(x,y):
+    return interpolate.interp1d(x,y,
+                                bounds_error=False,
+                                fill_value=(y[np.argmin(x)],
+                                            y[np.argmax(x)]))
 
-    num_psi=len(basis_psi)
-    dpsi=np.diff(basis_psi) #1/num_psi
+def get_volume(r,z,psi_grid,basis,
+               fit_psi=True, rho_grid=None):
+    efit_psi=np.linspace(0,1,65)
+    num_psi=len(basis)
     dr=np.diff(r)
     dz=np.diff(z)
-
     dv=np.zeros((psi_grid.shape[0],num_psi-1))
     #G1=np.zeros(num_psi)
+    
     for time_ind in range(psi_grid.shape[0]):
+        if fit_psi:
+            basis_psi=basis
+        else:
+            rho_to_psi = interpolate.interp1d(rho_grid[time_ind],
+                                              efit_psi)
+            basis_psi=rho_to_psi(basis)
+        dpsi=np.diff(basis_psi)
+
         for psi_ind in range(num_psi-1):
             gradient=np.gradient(psi_grid[time_ind])
 
@@ -39,7 +54,7 @@ def get_volume(r,z,psi_grid,basis_psi):
         # for (z_ind,r_ind) in zip(*hull):
         #     psi_gradient+=np.square(gradient[0][r_ind][z_ind])+np.square(gradient[1][r_ind][z_ind])
         # G1[i]=psi_gradient/len(hull[0])
-
+        
 # from Janev's 1989 "Penetration of energetic neutral beams into fusion plasmas"
 # ne is to be in 10^19 m^-3, Te in keV, E in keV/u
 def get_sigma(ne,Te,E=75,Z=2):

@@ -9,6 +9,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__),'..','lib'))
 #from mtanh_fit import real_to_psi_profile
+from transport_helpers import my_interp
 from rbf_fit import real_to_psi_profile
 from plot_tools import plot_comparison_over_time
 
@@ -27,6 +28,7 @@ scalar_sigs=['bmspinj15L', 'bmspinj21L', 'bmspinj30L',
              'bmstinj33R']
 transp_sigs=['PBI']
 include_psirz=True
+include_rho_grid=True
 
 debug=True
 debug_sig='thomson_temp_{}'.format(efit_type) 
@@ -53,11 +55,11 @@ def standardize_time(old_signal,old_timebase):
         if len(inds_in_range)==0:
             new_signal.append(np.nan)
         else:
-            #weights=np.array([np.exp(- (standard_times[i]-old_timebase[ind]) / falloff) for ind in inds_in_range])
-            #plt.plot(old_timebase[inds_in_range],weights)
-            #plt.show()
-            #weights/=sum(weights)
-            #new_signal.append(np.sum(np.tensordot(old_signal[inds_in_range],weights,axes=0)[0],axis=0))
+            # weights=np.array([np.exp(- (standard_times[i]-old_timebase[ind]) / falloff) for ind in inds_in_range])
+            # plt.plot(old_timebase[inds_in_range],weights)
+            # plt.show()
+            # weights/=sum(weights)
+            # new_signal.append(np.sum(np.tensordot(old_signal[inds_in_range],weights,axes=0)[0],axis=0))
             new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
     return new_signal
 
@@ -90,9 +92,12 @@ for shot in data.keys():
 
     if include_psirz:
         final_data[shot]['psirz']=psirz
+    if include_rho_grid:
+        final_data[shot]['rho_grid']=rho
         
     r_z_to_psi=[interpolate.interp2d(data[shot][efit_type]['R'],data[shot][efit_type]['Z'],psirz[time_ind]) for time_ind in range(len(standard_times))]
-    psi_to_rho=[interpolate.interp1d(efit_psi,data[shot][efit_type]['rho_grid'][time_ind], bounds_error=False) for time_ind in range(len(standard_times))]
+    psi_to_rho=[my_interp(efit_psi,
+                          data[shot][efit_type]['rho_grid'][time_ind]) for time_ind in range(len(standard_times))]
 
     # CER
     for signal in cer_sigs:
@@ -101,7 +106,7 @@ for shot in data.keys():
         psi=[]
         value=[]
         error=[]
-
+        
         scale={'temp': 1e3, 'rotation': 1}
         for system in ['VERTICAL','TANGENTIAL']:
             for channel in data[shot]['cer'][system]:
@@ -119,10 +124,10 @@ for shot in data.keys():
                     z.append(standardize_time(data[shot]['cer'][system][channel][cer_type]['Z'],
                                               data[shot]['cer'][system][channel][cer_type]['time']))
                     psi.append([r_z_to_psi[time_ind](r[-1][time_ind],z[-1][time_ind])[0] for time_ind in range(len(standard_times))])
-
+                    
         value=np.array(value).T
         psi=np.array(psi).T
-        error=np.array(error)
+        error=np.array(error).T
         uncertainty=np.full(np.shape(value),np.nanmean(np.abs(value))*.1)
         max_uncertainty=np.nanmax(uncertainty)*5
         value[np.where(error==1)]=np.nan
@@ -196,6 +201,7 @@ for shot in data.keys():
             in_x=np.array(in_x)
             out_x=standard_rho
             x_label='rho'
+            
         final_data[shot][final_sig_name] = real_to_psi_profile(in_x,standard_times,value,uncertainty,out_x,standard_times)
 
         if debug and debug_sig==final_sig_name and debug_shot==shot:
@@ -215,10 +221,7 @@ for shot in data.keys():
             transp_data=standardize_time(data[shot]['transp'][signal],data[shot]['transp']['beam_time']*1000)
             if fit_psi:
                 for time_ind in range(len(standard_times)):
-                    rho_to_transp=interpolate.interp1d(transp_rho,
-                                                       transp_data[time_ind],
-                                                       bounds_error=False,
-                                                       fill_value=(transp_data[time_ind][np.argmin(transp_rho)],transp_data[time_ind][np.argmax(transp_rho)]))
+                    rho_to_transp=my_interp(transp_rho,transp_data[time_ind])
                     final_data[shot][final_sig_name].append(rho_to_transp(rho[time_ind]))
                 final_data[shot][final_sig_name]=np.array(final_data[shot][final_sig_name])
                 x_out=standard_psi

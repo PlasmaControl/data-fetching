@@ -15,7 +15,11 @@ with open(os.path.join(data_dir,'final_data_batch_0.pkl'),'rb') as f:
     data=pickle.load(f)
 
 dn_dt = np.diff(data[shot]['thomson_dens_{}'.format(efit_type)],axis=-1)
-ddv_dt = np.diff(data['dv'],axis=-1)
+ddv_dt = np.diff(data[shot]['dv'],axis=-1)
+
+source=data[shot]['total_deposition']/1.6e-19 / 75
+dGamma_dRho = np.multiply(dv, source)
+
 print(ddv_dt.shape)
 # for time_ind in range(len(data[shot]['time'])):
 #     data[shot]['thomson_dens_{}'.format(efit_type)][time_ind]

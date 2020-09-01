@@ -7,7 +7,17 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__),'lib'))
 from plot_tools import plot_comparison_over_time
-from transport_helpers import get_volume, get_sigma
+from transport_helpers import get_volume, get_sigma, my_interp
+
+shot=163303
+efit_type='EFIT01'
+
+fit_psi=False
+
+standard_rho=np.linspace(.025,.975,20)
+standard_psi=np.linspace(0,1,65)
+efit_psi=np.linspace(0,1,65)
+deposition_psi=np.linspace(0,1,20)
 
 data_dir=os.path.join(os.path.dirname(__file__),'data')
 with open(os.path.join(data_dir,'final_data_full_batch_0.pkl'),'rb') as f:
@@ -74,19 +84,16 @@ def rt_and_angle_to_r_and_z(rt, angle, num_points=100, R=1.67):
     z=line[2]
     return (np.stack((r,z),axis=-1),np.linalg.norm(end_point-start_point) / num_points)
 
-shot=163303
-efit_type='EFIT01'
-beam='30L'
-(points,volume)=rt_and_angle_to_r_and_z(tangencies[beam],angles[beam])
-
-standard_psi=np.linspace(0,1,65)
-deposition_psi=np.linspace(0,1,20)
 depositions={}
 for beam in beams:
+    (points,volume)=rt_and_angle_to_r_and_z(tangencies[beam],angles[beam])
     power=data[shot]['bmspinj{}'.format(beam)]
     iBeam0=power
-    
-    deposition=np.zeros((len(data[shot]['time']),len(deposition_psi)))
+
+    if fit_psi:
+        deposition=np.zeros((len(data[shot]['time']),len(deposition_psi)))
+    else:
+        deposition=np.zeros((len(data[shot]['time']),len(standard_rho)))
     for time_ind in range(len(data[shot]['time'])):
         # see pencil beam theory, Rome's 1974
         # "Neutral-beam injection into a tokamak, 
@@ -96,10 +103,22 @@ for beam in beams:
         r_z_to_psi=interpolate.interp2d(full_data[shot][efit_type]['R'],
                                         full_data[shot][efit_type]['Z'],
                                         data[shot]['psirz'][time_ind])
-        psi_to_density=interpolate.interp1d(standard_psi,
-                                            data[shot]['thomson_dens_{}'.format(efit_type)][time_ind])
-        psi_to_temp=interpolate.interp1d(standard_psi,
-                                            data[shot]['thomson_temp_{}'.format(efit_type)][time_ind])
+
+
+        if fit_psi:
+            psi_to_density=interpolate.interp1d(standard_psi,
+                                                data[shot]['thomson_dens_{}'.format(efit_type)][time_ind])
+            psi_to_temp=interpolate.interp1d(standard_psi,
+                                                data[shot]['thomson_temp_{}'.format(efit_type)][time_ind])
+        else:
+            rho_to_psi = my_interp(data[shot]['rho_grid'][time_ind],
+                                efit_psi)
+            deposition_psi=rho_to_psi(standard_rho)
+            psi_to_density = my_interp(deposition_psi,
+                                    data[shot]['thomson_dens_{}'.format(efit_type)][time_ind])
+            psi_to_temp = my_interp(deposition_psi,
+                                 data[shot]['thomson_temp_{}'.format(efit_type)][time_ind])
+
         iBeam=np.zeros(len(points))
         iBeam[0]=iBeam0[time_ind]
 
@@ -107,7 +126,7 @@ for beam in beams:
             r=points[point_ind][0]
             z=points[point_ind][1]
             psi=r_z_to_psi(r,z)
-            if psi<1:
+            if psi<np.max(deposition_psi):
                 psi_index=np.searchsorted(deposition_psi,psi)
                 # get_sigma returns cm^2
                 sigma=get_sigma(ne=psi_to_density(psi),
@@ -116,9 +135,11 @@ for beam in beams:
                 # so lambdaP is in 10^-15 m
                 lambdaP=1/(psi_to_density(psi)*sigma) * 1e-15
                 diBeam=( -iBeam[point_ind] / lambdaP ) * volume
+                if np.isnan(diBeam):
+                    import pdb; pdb.set_trace()
                 deposition[time_ind][psi_index] -= diBeam
                 iBeam[point_ind+1] = iBeam[point_ind] + diBeam
-            
+                
     depositions[beam]=deposition
 
 total_deposition=np.zeros(depositions[beams[0]].shape)
@@ -128,22 +149,38 @@ for beam in beams:
 r=full_data[shot]['EFIT01']['R']
 z=full_data[shot]['EFIT01']['Z']
 psi_grid=np.array(data[shot]['psirz'])
+if fit_psi:
+    dv=get_volume(r=r,z=z,psi_grid=psi_grid,
+                  basis=deposition_psi)
+else:
+    dv=get_volume(r=r,z=z,psi_grid=psi_grid,
+                  basis=standard_rho,
+                  fit_psi=False, rho_grid=data[shot]['rho_grid'])
 # the 1e6 is because we want volume in cm^3 instead of m^3
-dv=get_volume(r=r,z=z,psi_grid=psi_grid,basis_psi=deposition_psi)*1e6
+dv=dv*1e6
+
+total_deposition=np.divide(total_deposition,dv)
 
 data[shot]['depositions']=depositions
 data[shot]['total_deposition']=total_deposition
 data[shot]['dv']=dv
 
-total_deposition=np.divide(total_deposition,dv)
-
-plot_comparison_over_time(xlist=(standard_psi,deposition_psi),
-                          ylist=(data[shot]['transp_PBI'],total_deposition),
-                          time=data[shot]['time'],
-                          ylabel='PBI (W/cm^3)',
-                          xlabel='psi',
-                          uncertaintylist=None,
-                          labels=('NUBEAM','DUMBBEAM'))
+if fit_psi:
+    plot_comparison_over_time(xlist=(standard_psi,deposition_psi),
+                              ylist=(data[shot]['transp_PBI'],total_deposition),
+                              time=data[shot]['time'],
+                              ylabel='PBI (W/cm^3)',
+                              xlabel='psi',
+                              uncertaintylist=None,
+                              labels=('NUBEAM','DUMBBEAM'))
+else:
+    plot_comparison_over_time(xlist=(standard_rho,standard_rho),
+                              ylist=(data[shot]['transp_PBI'],total_deposition),
+                              time=data[shot]['time'],
+                              ylabel='PBI (W/cm^3)',
+                              xlabel='rho',
+                              uncertaintylist=None,
+                              labels=('NUBEAM','DUMBBEAM'))
 
 with open(os.path.join(data_dir,'final_data_batch_0.pkl'),'wb') as f:
     data=pickle.dump(data,f)
