@@ -67,11 +67,12 @@ dn_dRho=np.diff(density,axis=-1)
 last_val=np.atleast_2d(dn_dRho[:,-1])
 dn_dRho=np.concatenate((dn_dRho.T,last_val),axis=0).T
 
-dn_dRho=np.clip(dn_dRho,.1e19/len(standard_rho),None)
+#dn_dRho=np.clip(dn_dRho,.1e19/len(standard_rho),None)
 
 De = - np.divide(gamma,
                  np.multiply(data[shot]['dv'],
                                     np.multiply(data[shot]['G1'], dn_dRho) ))
+De = np.clip(De,-40000,40000)
 
 if True:
     plot_comparison_over_time(xlist=[standard_rho,standard_rho],
@@ -81,3 +82,11 @@ if True:
                               xlabel='rho',
                               uncertaintylist=None,
                               labels=['TRANSP','me'])
+if False:
+    plot_comparison_over_time(xlist=[standard_rho],
+                              ylist=[De],
+                              time=data[shot]['time'],
+                              ylabel='diffusivity',
+                              xlabel='rho',
+                              uncertaintylist=None,
+                              labels=['me'])

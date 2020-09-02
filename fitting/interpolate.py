@@ -41,7 +41,8 @@ debug_shot=163303
 batch_num=0
 
 time_base=200
-#falloff=50
+exponential_falloff=True
+falloff=50
 time_step=50
 
 fit_psi=False
@@ -59,12 +60,12 @@ def standardize_time(old_signal,old_timebase):
         if len(inds_in_range)==0:
             new_signal.append(np.nan)
         else:
-            # weights=np.array([np.exp(- (standard_times[i]-old_timebase[ind]) / falloff) for ind in inds_in_range])
-            # plt.plot(old_timebase[inds_in_range],weights)
-            # plt.show()
-            # weights/=sum(weights)
-            # new_signal.append(np.sum(np.tensordot(old_signal[inds_in_range],weights,axes=0)[0],axis=0))
-            new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
+            if exponential_falloff:
+                weights=np.array([np.exp(- (standard_times[i]-old_timebase[ind]) / falloff) for ind in inds_in_range])
+                weights/=sum(weights)
+                new_signal.append( np.array( np.sum( [old_signal[ind]*weights[j] for j,ind in enumerate(inds_in_range)], axis=0) ) )
+            else:     
+                new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
     return new_signal
 
 final_data={}

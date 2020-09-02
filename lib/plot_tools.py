@@ -49,7 +49,7 @@ def plot_slice(ax):
         else:
             ax.plot(x[ax.index],
                     y[ax.index])
-
+    ax.axhline(0,c='k',alpha=.5)
     if ax.ylims is not None:
         ax.set_ylim(ax.ylims)
     if ax.time is not None:
