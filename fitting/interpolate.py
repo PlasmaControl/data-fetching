@@ -31,7 +31,7 @@ include_psirz=True
 include_rho_grid=True
 
 debug=True
-debug_sig='thomson_temp_{}'.format(efit_type) 
+debug_sig='thomson_dens_{}'.format(efit_type) 
 debug_shot=163303
 
 batch_num=0

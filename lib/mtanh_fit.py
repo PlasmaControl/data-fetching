@@ -1,6 +1,7 @@
 import numpy as np
 import sys
-sys.path.append('/Users/josephabbate/Documents/research/fitting/astrolibpy/mpfit')
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__),'astrolibpy/mpfit/'))
 from mpfit import mpfit
 
 def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out):
@@ -56,17 +57,6 @@ def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out):
 
         final_sig.append(shifted_mtanh(standard_psi,m.params))
         
-#         if debug:
-#             plt.plot(x,shifted_mtanh(x,m.params),c='r')
-#             plt.errorbar(x,
-#                          value[~excluded_inds,ind],
-#                          np.clip(uncertainty[~excluded_inds,ind],0,max_uncertainty),
-#                          ls='None')
-#             plt.xlabel('psi')
-# #            plt.ylabel(signal)
-#             plt.title('{}ms'.format(t_out[ind]))
-#             plt.show()
-
     return np.array(final_sig)
 
 def mtanh(alpha,z):

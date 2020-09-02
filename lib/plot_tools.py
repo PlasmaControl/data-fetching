@@ -64,6 +64,7 @@ def plot_comparison_over_time(xlist, ylist, time,
                               uncertaintylist=None, 
                               labels=None):
     ymax=max([np.nanmax(y) for y in ylist])
+    ymin=min(0,min([np.nanmin(y) for y in ylist]))
 
     fig, ax = plt.subplots()
     ax.xlist=xlist 
@@ -72,7 +73,7 @@ def plot_comparison_over_time(xlist, ylist, time,
     ax.uncertaintylist=uncertaintylist
     ax.ylabel=ylabel
     ax.xlabel=xlabel
-    ax.ylims=((0,ymax*1.2))
+    ax.ylims=((ymin,ymax))
     ax.labels=labels
     ax.index=0
     plot_slice(ax)

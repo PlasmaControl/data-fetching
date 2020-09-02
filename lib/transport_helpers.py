@@ -1,6 +1,14 @@
 import numpy as np
 from scipy import interpolate
 
+def fill_value(arr2d):
+    # dv is differential so will be missing the last volume element
+    # this is a hack, but we add the last psi value for each time
+    # to the end to reshape it to match basis_psi
+    last_val=np.atleast_2d(arr2d[:,-1])
+    #transpose and untraspose to match what np.concatentate expects
+    return np.concatenate((arr2d.T,last_val),axis=0).T
+
 def my_interp(x,y):
     return interpolate.interp1d(x,y,
                                 bounds_error=False,
