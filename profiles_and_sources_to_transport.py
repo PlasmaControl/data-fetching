@@ -12,6 +12,8 @@ efit_type='EFIT01'
 
 debug=False
 
+sig_name_dens='zipfit_dens_{}'.format(efit_type)
+
 standard_rho=np.linspace(.025,.975,20)
 # standard_psi=np.linspace(0,1,65)
 # transp_psi=np.linspace(0,1,20)
@@ -33,7 +35,7 @@ particle_energy=75
 source=beam_deposition /1.6e-19 /1000 /particle_energy *1e6
 particles_from_source = np.multiply(data[shot]['dv'], source)
 
-density=data[shot]['thomson_dens_{}'.format(efit_type)] *1e19 
+density=data[shot][sig_name_dens] *1e19 
 
 particle_time_change=np.diff(np.multiply(data[shot]['dv'],
                                          density),axis=0) / dt
@@ -72,10 +74,10 @@ De = - np.divide(gamma,
                                     np.multiply(data[shot]['G1'], dn_dRho) ))
 
 if True:
-    plot_comparison_over_time(xlist=[standard_rho],
-                              ylist=[De],
+    plot_comparison_over_time(xlist=[standard_rho,standard_rho],
+                              ylist=[data[shot]['transp_DIFFE'],De],
                               time=data[shot]['time'],
-                              ylabel='De',
+                              ylabel='diffusivity',
                               xlabel='rho',
                               uncertaintylist=None,
-                              labels=None)
+                              labels=['TRANSP','me'])

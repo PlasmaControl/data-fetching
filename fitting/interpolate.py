@@ -26,12 +26,16 @@ scalar_sigs=['bmspinj15L', 'bmspinj21L', 'bmspinj30L',
              'bmstinj21L', 'bmstinj30L', 'bmstinj33L',
              'bmstinj15R', 'bmstinj21R', 'bmstinj30R',
              'bmstinj33R']
-transp_sigs=['PBI']
+transp_sigs=['PBI',
+             'DIFFE','DIFFI','DIFFX',
+             'CONDE','CONDI',
+             'CHPHI']
+zipfit_sigs=['temp', 'dens', 'rotation','idens', 'itemp']
 include_psirz=True
 include_rho_grid=True
 
 debug=True
-debug_sig='thomson_dens_{}'.format(efit_type) 
+debug_sig='zipfit_temp_{}'.format(efit_type) 
 debug_shot=163303
 
 batch_num=0
@@ -64,7 +68,7 @@ def standardize_time(old_signal,old_timebase):
     return new_signal
 
 final_data={}
-for shot in data.keys():
+for shot in [163303]:#data.keys():
     min_time=max(data[shot]['t_ip_flat'],
                  min(data[shot][efit_type]['time']))
     #min_time+=time_base
@@ -96,8 +100,12 @@ for shot in data.keys():
         final_data[shot]['rho_grid']=rho
         
     r_z_to_psi=[interpolate.interp2d(data[shot][efit_type]['R'],data[shot][efit_type]['Z'],psirz[time_ind]) for time_ind in range(len(standard_times))]
-    psi_to_rho=[my_interp(efit_psi,
-                          data[shot][efit_type]['rho_grid'][time_ind]) for time_ind in range(len(standard_times))]
+    if fit_psi:
+        rho_to_psi=[my_interp(data[shot][efit_type]['rho_grid'][time_ind],
+                              efit_psi) for time_ind in range(len(standard_times))]
+    else:
+        psi_to_rho=[my_interp(efit_psi,
+                              data[shot][efit_type]['rho_grid'][time_ind]) for time_ind in range(len(standard_times))]
 
     # CER
     for signal in cer_sigs:
@@ -239,6 +247,35 @@ for shot in data.keys():
                 	                  xlabel=x_label,
                 	                  uncertaintylist=None,
                                           labels=None)
-                                
+
+    # Zipfit
+    for signal in zipfit_sigs:
+        value=data[shot]['zipfit_and_aot'][signal]['value']
+        uncertainty=data[shot]['zipfit_and_aot'][signal]['uncertainty']
+
+        final_sig_name='zipfit_{}_{}'.format(signal,efit_type)
+        if fit_psi:
+            in_x=[]
+            for time_ind in range(len(standard_times)):
+                in_x.append(rho_to_psi[time_ind](data[shot]['zipfit_and_aot'][signal]['rho']))
+            in_x=np.array(in_x)
+            out_x=standard_psi
+            x_label='psi'
+        else:
+            in_x=data[shot]['zipfit_and_aot'][signal]['rho']
+            in_x=np.tile(in_x,(len(standard_times),1))
+            out_x=standard_rho
+            x_label='rho'
+        final_data[shot][final_sig_name]=real_to_psi_profile(in_x,standard_times,value,uncertainty,out_x,standard_times)
+
+        if debug and debug_sig==final_sig_name and debug_shot==shot:
+            plot_comparison_over_time(xlist=(in_x,out_x),
+                                      ylist=(value,final_data[shot][final_sig_name]), 
+		                      time=standard_times,
+                	              ylabel=final_sig_name,
+                	              xlabel=x_label,
+                	              uncertaintylist=(uncertainty,None),
+                                      labels=('data','original'))
+            
 with open(os.path.join(data_dir,'final_data_batch_{}.pkl'.format(batch_num)),'wb') as f:
     pickle.dump(final_data,f)
