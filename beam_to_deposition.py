@@ -19,6 +19,9 @@ standard_psi=np.linspace(0,1,65)
 efit_psi=np.linspace(0,1,65)
 deposition_psi=np.linspace(0,1,20)
 
+density_sig_name='zipfit_dens_{}'.format(efit_type) #'thomson_dens_{}'.format(efit_type)
+temp_sig_name='zipfit_dens_{}'.format(efit_type) #'thomson_temp_{}'.format(efit_type)
+
 data_dir=os.path.join(os.path.dirname(__file__),'data')
 with open(os.path.join(data_dir,'final_data_full_batch_0.pkl'),'rb') as f:
     full_data=pickle.load(f)
@@ -107,17 +110,17 @@ for beam in beams:
 
         if fit_psi:
             psi_to_density=interpolate.interp1d(standard_psi,
-                                                data[shot]['thomson_dens_{}'.format(efit_type)][time_ind])
+                                                data[shot][density_sig_name][time_ind])
             psi_to_temp=interpolate.interp1d(standard_psi,
-                                                data[shot]['thomson_temp_{}'.format(efit_type)][time_ind])
+                                                data[shot][temp_sig_name][time_ind])
         else:
             rho_to_psi = my_interp(data[shot]['rho_grid'][time_ind],
                                 efit_psi)
             deposition_psi=rho_to_psi(standard_rho)
             psi_to_density = my_interp(deposition_psi,
-                                    data[shot]['thomson_dens_{}'.format(efit_type)][time_ind])
+                                    data[shot][density_sig_name][time_ind])
             psi_to_temp = my_interp(deposition_psi,
-                                 data[shot]['thomson_temp_{}'.format(efit_type)][time_ind])
+                                 data[shot][temp_sig_name][time_ind])
 
         iBeam=np.zeros(len(points))
         iBeam[0]=iBeam0[time_ind]
@@ -149,16 +152,17 @@ for beam in beams:
 r=full_data[shot]['EFIT01']['R']
 z=full_data[shot]['EFIT01']['Z']
 psi_grid=np.array(data[shot]['psirz'])
-if fit_psi:
-    dv=get_volume(r=r,z=z,psi_grid=psi_grid,
-                  basis=deposition_psi)
-else:
-    dv=get_volume(r=r,z=z,psi_grid=psi_grid,
-                  basis=standard_rho,
-                  fit_psi=False, rho_grid=data[shot]['rho_grid'])
-# the 1e6 is because we want volume in cm^3 instead of m^3
-dv=dv*1e6
+# if fit_psi:
+#     dv=get_volume(r=r,z=z,psi_grid=psi_grid,
+#                   basis=deposition_psi)
+# else:
+#     dv=get_volume(r=r,z=z,psi_grid=psi_grid,
+#                   basis=standard_rho,
+#                   fit_psi=False, rho_grid=data[shot]['rho_grid'])
+# # the 1e6 is because we want volume in cm^3 instead of m^3
+# dv=dv*1e6
 
+dv=data[shot]['dv']*1e6
 total_deposition=np.divide(total_deposition,dv)
 
 data[shot]['depositions']=depositions
