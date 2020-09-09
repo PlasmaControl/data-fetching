@@ -20,7 +20,7 @@ efit_psi=np.linspace(0,1,65)
 deposition_psi=np.linspace(0,1,20)
 
 density_sig_name='zipfit_dens_{}'.format(efit_type) #'thomson_dens_{}'.format(efit_type)
-temp_sig_name='zipfit_dens_{}'.format(efit_type) #'thomson_temp_{}'.format(efit_type)
+temp_sig_name='zipfit_temp_{}'.format(efit_type) #'thomson_temp_{}'.format(efit_type)
 
 data_dir=os.path.join(os.path.dirname(__file__),'data')
 with open(os.path.join(data_dir,'final_data_full_batch_0.pkl'),'rb') as f:

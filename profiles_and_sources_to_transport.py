@@ -13,6 +13,7 @@ efit_type='EFIT01'
 debug=False
 
 sig_name_dens='zipfit_dens_{}'.format(efit_type)
+sig_name_etemp='zipfit_temp_{}'.format(efit_type)
 
 standard_rho=np.linspace(.025,.975,20)
 # standard_psi=np.linspace(0,1,65)
@@ -29,20 +30,24 @@ dt=np.diff(data[shot]['time'])[0] / 1000
 #beam_deposition=data[shot]['total_deposition']
 beam_deposition=data[shot]['transp_PBI']
 
-#J to eV, then eV to keV, then keV to particles (all per s*cm^3)
-#then from cm^-3 to m^-3
-particle_energy=75
-source=beam_deposition /1.6e-19 /1000 /particle_energy *1e6
-particles_from_source = np.multiply(data[shot]['dv'], source)
+# J/ (s cm^3) --> eV --> keV --> /m^3 to keV/s
+power_from_source = np.multiply(data[shot]['dv'],beam_deposition) /1.6e-19 /1000 *1e6
+power_from_source_to_electrons = power_from_source*.5
 
-density=data[shot][sig_name_dens] *1e19 
+particle_energy=75 #in keV!
+particles_from_source=power_from_source / particle_energy
 
+etemp=data[shot][sig_name_etemp]
+density=data[shot][sig_name_dens] *1e19
+
+
+# particle flux equation
 particle_time_change=np.diff(np.multiply(data[shot]['dv'],
                                          density),axis=0) / dt
 last_val=np.atleast_2d(particle_time_change[-1,:])
 particle_time_change=np.concatenate((particle_time_change,last_val),axis=0)
 
-if debug:
+if False: #debug:
     # if DIII-D confinement time is 100ms and there are a few 10^19 * 40, i.e. a few 10^20, particles at any given
     # time, then there should be about 10^21 particles coming in per second. I'd guess most of these are from beams?
     #
@@ -74,11 +79,44 @@ De = - np.divide(gamma,
                                     np.multiply(data[shot]['G1'], dn_dRho) ))
 De = np.clip(De,-40000,40000)
 
+
+
+# electron heat flux equation
+etemp_time_change=np.diff(np.multiply(np.multiply(np.power(data[shot]['dv'],5/3.),
+                                                 density),
+                                     etemp),axis=0) / dt
+last_val=np.atleast_2d(etemp_time_change[-1,:])
+etemp_time_change=np.concatenate((etemp_time_change,last_val),axis=0)
+etemp_time_change=(3/2.) * np.multiply(etemp_time_change,np.power(data[shot]['dv'],-2/3.))
+
+etemp_from_particle_transport=np.diff((5/2.)*np.multiply(etemp,
+                                                        gamma),axis=-1)
+last_val=np.atleast_2d(etemp_from_particle_transport[:,-1])
+etemp_from_particle_transport=np.concatenate((etemp_from_particle_transport.T,
+                                             last_val),axis=0).T
+
+
+dqe_dRho = power_from_source_to_electrons - etemp_from_particle_transport - etemp_time_change
+qe=np.cumsum(np.multiply(dqe_dRho,standard_rho),axis=-1)
+
+# from ASTRA paper
+# q = -dv * G1 * De * ne * dn/drho
+
+dTe_dRho=np.diff(etemp,axis=-1)
+last_val=np.atleast_2d(dTe_dRho[:,-1])
+dTe_dRho=np.concatenate((dTe_dRho.T,last_val),axis=0).T
+
+chie = - np.divide(qe,
+                   np.multiply(np.multiply(data[shot]['dv'],
+                                           np.multiply(data[shot]['G1'], dTe_dRho)),
+                               density))
+chie = np.clip(chie,-40000,200000)
+
 if True:
     plot_comparison_over_time(xlist=[standard_rho,standard_rho],
-                              ylist=[data[shot]['transp_DIFFE'],De],
+                              ylist=[data[shot]['transp_CONDE'],chie],
                               time=data[shot]['time'],
-                              ylabel='diffusivity',
+                              ylabel='chi',
                               xlabel='rho',
                               uncertaintylist=None,
                               labels=['TRANSP','me'])

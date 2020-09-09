@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import numpy as np
-
 
 def process_key(event):
     fig = event.canvas.figure
@@ -79,3 +79,31 @@ def plot_comparison_over_time(xlist, ylist, time,
     plot_slice(ax)
     fig.canvas.mpl_connect('key_press_event', process_key)
     plt.show()
+
+def plot_2d_comparison(x_axis, y_axis, data_2d,
+                       x_scatter_data, y_scatter_data, scatter_data,
+                       xlims=None, ylims=None,
+                       xlabel=None, ylabel=None, title=None):
+    vmin=min((np.min(data_2d),np.min(scatter_data)))
+    vmax=max((np.max(data_2d),np.max(scatter_data)))
+
+    #cs=plt.contourf(x_axis, y_axis, data_2d,
+    #                cmap=cm.viridis,vmin=vmin,vmax=vmax)
+    #plot a first time so you can see the actual fit before the overlayed data
+    plt.show()
+    cs=plt.contourf(x_axis, y_axis, data_2d,
+                    cmap=cm.viridis,vmin=vmin,vmax=vmax)
+    plt.scatter(x_scatter_data, y_scatter_data, 100, scatter_data,
+                cmap=cs.cmap, vmin=vmin,vmax=vmax,edgecolors='k',linewidths=.1)
+    if title is not None:
+        plt.title(title)
+    if xlims is not None:
+        plt.xlim(xlims)
+    if ylims is not None:
+        plt.ylim(ylims)
+    if xlabel is not None:
+        plt.xlabel(xlabel)
+    if ylabel is not None:
+        plt.ylabel(ylabel)
+    plt.show()
+    

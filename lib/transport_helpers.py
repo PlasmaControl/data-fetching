@@ -9,8 +9,14 @@ def fill_value(arr2d):
     #transpose and untraspose to match what np.concatentate expects
     return np.concatenate((arr2d.T,last_val),axis=0).T
 
-def my_interp(x,y):
+def interp_ND_rectangular(coords,data):
+    return interpolate.RegularGridInterpolator(coords,data,
+                                               bounds_error=False,
+                                               fill_value=None)
+
+def my_interp(x,y,kind='linear'):
     return interpolate.interp1d(x,y,
+                                kind=kind,
                                 bounds_error=False,
                                 fill_value=(y[np.argmin(x)],
                                             y[np.argmax(x)]))

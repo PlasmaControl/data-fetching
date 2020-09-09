@@ -8,8 +8,8 @@ from transport_helpers import my_interp
 from plot_tools import plot_comparison_over_time
 
 shot=163303
-debug=True
-debug_sig='G1'
+debug=False
+debug_sig='dv'
 
 data_dir=os.path.join(os.path.dirname(__file__),'data')
 with open(os.path.join(data_dir,'final_data_full_batch_0.pkl'),'rb') as f:
