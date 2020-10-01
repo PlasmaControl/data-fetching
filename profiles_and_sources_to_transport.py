@@ -68,6 +68,11 @@ dGamma_dRho = particles_from_source - particle_time_change
 
 gamma=np.cumsum(np.multiply(dGamma_dRho,standard_rho),axis=-1)
 
+# for debugging purposes, plot gamma due to source and due to time change separately
+if True:
+    gamma_source=np.cumsum(np.multiply(particles_from_source,standard_rho),axis=-1)
+    gamma_time=-np.cumsum(np.multiply(particle_time_change,standard_rho),axis=-1)
+
 dn_dRho=np.diff(density,axis=-1)
 last_val=np.atleast_2d(dn_dRho[:,-1])
 dn_dRho=np.concatenate((dn_dRho.T,last_val),axis=0).T
@@ -77,10 +82,23 @@ dn_dRho=np.concatenate((dn_dRho.T,last_val),axis=0).T
 De = - np.divide(gamma,
                  np.multiply(data[shot]['dv'],
                                     np.multiply(data[shot]['G1'], dn_dRho) ))
-De = np.clip(De,-40000,40000)
 
+clip_value=10000
 
+De = np.clip(De,-clip_value,clip_value)
 
+if True:
+    De_time = - np.divide(gamma_time,
+                          np.multiply(data[shot]['dv'],
+                                      np.multiply(data[shot]['G1'], dn_dRho) ))
+    De_time = np.clip(De_time,-clip_value,clip_value)    
+
+    De_source = - np.divide(gamma_source,
+                          np.multiply(data[shot]['dv'],
+                                      np.multiply(data[shot]['G1'], dn_dRho) ))
+    De_source = np.clip(De_source,-clip_value,clip_value)    
+
+    
 # electron heat flux equation
 etemp_time_change=np.diff(np.multiply(np.multiply(np.power(data[shot]['dv'],5/3.),
                                                  density),
@@ -110,16 +128,16 @@ chie = - np.divide(qe,
                    np.multiply(np.multiply(data[shot]['dv'],
                                            np.multiply(data[shot]['G1'], dTe_dRho)),
                                density))
-chie = np.clip(chie,-40000,200000)
+chie = np.clip(chie,-clip_value,clip_value*5)
 
 if True:
-    plot_comparison_over_time(xlist=[standard_rho,standard_rho],
-                              ylist=[data[shot]['transp_CONDE'],chie],
+    plot_comparison_over_time(xlist=[standard_rho for i in range(2)],
+                              ylist=[data[shot]['transp_DIFFE'], De],
                               time=data[shot]['time'],
                               ylabel='chi',
                               xlabel='rho',
                               uncertaintylist=None,
-                              labels=['TRANSP','me'])
+                              labels=['TRANSP', 'me'])
 if False:
     plot_comparison_over_time(xlist=[standard_rho],
                               ylist=[De],

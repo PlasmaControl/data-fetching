@@ -32,6 +32,29 @@ def linear_interp_1d(in_x, in_t, value, uncertainty, out_x, t_out):
     final_sig=np.array(final_sig)
     return final_sig
 
+def spline_1d(in_x, in_t, value, uncertainty, out_x, t_out):
+    final_sig=[]
+
+    for time_ind in range(len(in_t)):
+        excluded_inds=np.isnan(value[time_ind,:])
+        y=value[time_ind,~excluded_inds]
+        x=in_x[time_ind,~excluded_inds]
+        err=uncertainty[time_ind,~excluded_inds]
+
+        ordered_inds=np.argsort(x)
+        x=x[ordered_inds]
+        y=y[ordered_inds]
+
+        #        try:
+        #import pdb; pdb.set_trace()
+        get_value=interpolate.UnivariateSpline(x,y) #,kind='linear')
+        final_sig.append(get_value(out_x))
+#        except:
+#            final_sig.append(np.zeros(len(out_x)))
+            
+    final_sig=np.array(final_sig)
+    return final_sig
+
 def nn_interp_2d(in_x, in_t, value, uncertainty, out_x, out_t):
     final_sig=[]
 
@@ -125,33 +148,7 @@ def rbf_interp_2d(in_x, in_t, value, uncertainty, out_x, out_t, debug=False):
 
     return final_sig
 
-# def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out):
-#     final_sig=[]
-
-#     for ind in range(value.shape[1]):
-#         excluded_inds=np.isnan(value[:,ind])
-#         y=value[~excluded_inds,ind]
-#         x=psi[~excluded_inds,ind]
-#         err=uncertainty[~excluded_inds,ind]
-#         try:
-#             get_value=interpolate.interp1d(x,y,bounds_error=False)
-#             final_sig.append(get_value(standard_psi))
-#         except:
-#             final_sig.append(np.zeros(len(standard_psi)))
-            
-#     final_sig=np.array(final_sig)
-#     return final_sig
-
-# regular 1D interpolation
-# def real_to_psi_profile(psi, t0, value, uncertainty, standard_psi, t_out):
-#     final_sig=[]
-#     for ind in range(value.shape[1]):
-#         get_value=interpolate.interp1d(psi[:,ind],value[:,ind],bounds_error=False,fill_value=1)
-#         final_sig.append(get_value(standard_psi))
-#     final_sig=np.array(final_sig)
-#     return final_sig
-
-def mtanh_1d(psi, t0, value, uncertainty, standard_psi, t_out):
+def mtanh_1d(in_x, in_t, value, uncertainty, out_x, t_out):
     p0=np.array([1.0, 3.0, 0.01, 1.0, 0.01],dtype='float64')  #initial conditions
 
     parinfo=[]
@@ -189,20 +186,14 @@ def mtanh_1d(psi, t0, value, uncertainty, standard_psi, t_out):
 
     final_sig=[]
     
-    for ind in range(value.shape[1]):
-        excluded_inds=np.isnan(value[:,ind])
+    for ind in range(len(in_t)):
+        excluded_inds=np.isnan(value[ind,:])
 
-        # if len(error)!=0:
-        #     excluded_inds|=(error[:,ind]==1)
-
-    #    psi_to_rho=interpolate.interp1d(standard_psi,rho_grid[ind],fill_value='extrapolate')
-    #    rho=psi_to_rho(psi[~excluded_inds,ind])
-        x=psi[~excluded_inds,ind]
-        fa = {'x': x, 'y': value[~excluded_inds,ind], 'err': uncertainty[~excluded_inds,ind]}
+        fa = {'x': in_x[ind,~excluded_inds], 'y': value[ind,~excluded_inds], 'err': uncertainty[ind,~excluded_inds]}
 
         m = mpfit(my_shifted_mtanh, p0, parinfo=parinfo, functkw=fa, quiet=1)
 
-        final_sig.append(shifted_mtanh(standard_psi,m.params))
+        final_sig.append(shifted_mtanh(out_x,m.params))
         
     return np.array(final_sig)
 

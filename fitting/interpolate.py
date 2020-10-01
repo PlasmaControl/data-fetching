@@ -13,38 +13,39 @@ from plot_tools import plot_comparison_over_time, plot_2d_comparison
 data_dir=os.path.join(os.path.dirname(__file__),'..','data')
 
 fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
+                   'spline_1d': fit_functions.spline_1d,
                    'nn_interp_2d': fit_functions.nn_interp_2d,
                    'linear_interp_2d': fit_functions.linear_interp_2d,
                    'mtanh_1d': fit_functions.mtanh_1d,
                    'rbf_interp_2d': fit_functions.rbf_interp_2d}
-fit_functions_1d=['linear_interp_1d', 'mtanh_1d']
+fit_functions_1d=['linear_interp_1d', 'mtanh_1d','spline_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
 cer_type='cerquick'
 efit_type='EFIT01'
 
-trial_fits=['linear_interp_1d']
+trial_fits=['mtanh_1d','spline_1d']
 zipfit_interp=fit_function_dict['linear_interp_1d']
 
-thomson_sigs=[] #['temp','dens']
+thomson_sigs=['temp'] #['temp','dens']
 cer_sigs=[] #['temp','rotation']
-scalar_sigs=['bmspinj15L', 'bmspinj21L', 'bmspinj30L',
-             'bmspinj33L', 'bmspinj15R', 'bmspinj21R',
-             'bmspinj30R', 'bmspinj33R', 'bmstinj15L',
-             'bmstinj21L', 'bmstinj30L', 'bmstinj33L',
-             'bmstinj15R', 'bmstinj21R', 'bmstinj30R',
-             'bmstinj33R',
-             'bt']
+scalar_sigs=[] #['bmspinj15L', 'bmspinj21L', 'bmspinj30L',
+             # 'bmspinj33L', 'bmspinj15R', 'bmspinj21R',
+             # 'bmspinj30R', 'bmspinj33R', 'bmstinj15L',
+             # 'bmstinj21L', 'bmstinj30L', 'bmstinj33L',
+             # 'bmstinj15R', 'bmstinj21R', 'bmstinj30R',
+             # 'bmstinj33R',
+             # 'bt']
 
-transp_sigs=['PBI',
-             'DIFFE','DIFFI','DIFFX',
-             'CONDE','CONDI',
-             'CHPHI']
+transp_sigs=[] #['PBI',
+             # 'DIFFE','DIFFI','DIFFX',
+             # 'CONDE','CONDI',
+             # 'CHPHI']
 
 zipfit_sigs=['temp', 'dens', 'rotation','idens', 'itemp']
 
-include_psirz=True
-include_rho_grid=True
+include_psirz=False
+include_rho_grid=False
 
 debug=True
 debug_sig='thomson_temp'
@@ -52,13 +53,13 @@ debug_shot=163303
 
 batch_num=0
 
-causal=False
-time_base=50
-exponential_falloff=False
+causal=True #False
+time_base=300
+exponential_falloff=True
 falloff=50
 time_step=50
 
-fit_psi=False
+fit_psi=True #False
 efit_psi=np.linspace(0,1,65)
 standard_psi=np.linspace(0,1,65)
 standard_rho=np.linspace(.025,.975,20)
@@ -112,7 +113,6 @@ def fit_all_and_save(prefix, signal,
             ylist.append(final_data[shot][final_sig_name])
             uncertaintylist.append(None)
             labels.append(trial_fit)
-
         plot_comparison_over_time(xlist=xlist,
                                   ylist=ylist,
                                   time=standard_times,
@@ -147,7 +147,6 @@ final_data={}
 for shot in data.keys():
     min_time=max(data[shot]['t_ip_flat'],
                  min(data[shot][efit_type]['time']))
-    #min_time+=time_base
     max_time=min(data[shot]['t_ip_flat']+data[shot]['ip_flat_duration'],
                  max(data[shot][efit_type]['time']))
     standard_times=np.arange(min_time,max_time,time_step)
@@ -274,7 +273,6 @@ for shot in data.keys():
         time_2d_fit=np.array(time_2d_fit)
         error_2d_fit=np.array(error_2d_fit)
         uncertainty_2d_fit=np.full(np.shape(value_2d_fit),np.nanmean(np.abs(value_2d_fit))*.1)
-        #max_uncertainty_2d_fit=np.nanmax(uncertainty_2d_fit)*5
         value_2d_fit[np.where(error_2d_fit==1)]=np.nan
 
         if fit_psi:
@@ -331,7 +329,6 @@ for shot in data.keys():
         value=np.array(value).T
         psi=np.array(psi).T
         uncertainty=np.array(uncertainty).T
-        #max_uncertainty=np.nanmax(uncertainty)
         value[np.isclose(value,0)]=np.nan
         value[np.isclose(uncertainty,0)]=np.nan
 
@@ -433,5 +430,5 @@ for shot in data.keys():
                 	              uncertaintylist=(uncertainty,None),
                                       labels=('data','original'))
             
-with open(os.path.join(data_dir,'final_data_batch_{}.pkl'.format(batch_num)),'wb') as f:
-    pickle.dump(final_data,f)
+# with open(os.path.join(data_dir,'final_data_batch_{}.pkl'.format(batch_num)),'wb') as f:
+#     pickle.dump(final_data,f)
