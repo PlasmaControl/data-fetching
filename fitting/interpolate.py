@@ -2,8 +2,11 @@ import pickle
 from scipy import interpolate
 import numpy as np
 
+import time
+
 import os
 import sys
+import re
 
 sys.path.append(os.path.join(os.path.dirname(__file__),'..','lib'))
 from transport_helpers import my_interp, interp_ND_rectangular

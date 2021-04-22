@@ -8,13 +8,15 @@ from mpfit import mpfit
 
 from OMFITlib_fit import fit_rbf
 
+from csaps import csaps
+
 #import sys
 #import os
 #sys.path.append(os.path.join(os.path.dirname(__file__),'..','lib'))
 
 from transport_helpers import my_interp
 
-def linear_interp_1d(in_x, in_t, value, uncertainty, out_x, t_out):
+def linear_interp_1d(in_x, in_t, value, uncertainty, out_x):
     final_sig=[]
 
     for time_ind in range(len(in_t)):
@@ -32,7 +34,28 @@ def linear_interp_1d(in_x, in_t, value, uncertainty, out_x, t_out):
     final_sig=np.array(final_sig)
     return final_sig
 
-def spline_1d(in_x, in_t, value, uncertainty, out_x, t_out):
+def csaps_1d(in_x, in_t, value, uncertainty, out_x):
+    final_sig=[]
+
+    for time_ind in range(len(in_t)):
+        excluded_inds=np.isnan(value[time_ind,:])
+        y=value[time_ind,~excluded_inds]
+        x=in_x[time_ind,~excluded_inds]
+        err=uncertainty[time_ind,~excluded_inds]
+
+        inds=np.argsort(x)
+        x=x[inds]
+        y=y[inds]
+
+        try:
+            final_sig.append(csaps(x,y,out_x,smooth=0.99995)) #get_value(out_x))
+        except:
+            final_sig.append(np.zeros(len(out_x)))
+            
+    final_sig=np.array(final_sig)
+    return final_sig
+
+def spline_1d(in_x, in_t, value, uncertainty, out_x):
     final_sig=[]
 
     for time_ind in range(len(in_t)):
@@ -45,12 +68,12 @@ def spline_1d(in_x, in_t, value, uncertainty, out_x, t_out):
         x=x[ordered_inds]
         y=y[ordered_inds]
 
-        #        try:
-        #import pdb; pdb.set_trace()
-        get_value=interpolate.UnivariateSpline(x,y) #,kind='linear')
-        final_sig.append(get_value(out_x))
-#        except:
-#            final_sig.append(np.zeros(len(out_x)))
+        try:
+            #import pdb; pdb.set_trace()
+            get_value=interpolate.UnivariateSpline(x,y) #,kind='linear')
+            final_sig.append(get_value(out_x))
+        except:
+            final_sig.append(np.zeros(len(out_x)))
             
     final_sig=np.array(final_sig)
     return final_sig
@@ -148,7 +171,7 @@ def rbf_interp_2d(in_x, in_t, value, uncertainty, out_x, out_t, debug=False):
 
     return final_sig
 
-def mtanh_1d(in_x, in_t, value, uncertainty, out_x, t_out):
+def mtanh_1d(in_x, in_t, value, uncertainty, out_x):
     p0=np.array([1.0, 3.0, 0.01, 1.0, 0.01],dtype='float64')  #initial conditions
 
     parinfo=[]
