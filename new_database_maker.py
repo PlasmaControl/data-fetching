@@ -37,51 +37,64 @@ import matplotlib.pyplot as plt
 ###### USER INPUTS ######
 #                       #
 
-shots=np.load('shots.npy')
-shots=[187076]
-#shots = [163303] #[185769] #[163303,175970] #175970 is Colin's good modulation shot; 154764 is David Eldon's
+#shots=np.load('new_shots.npy')
+shots = [175286] #[185769] #[163303,175970] #175970 is Colin's good modulation shot; 154764 is David Eldon's
 
 tmin = 0
 tmax = 6000
 
-output_file='realtime_paper_data.pkl'
+output_file='raw_data_test.pkl' #/cscratch/abbatej/new_big_ml_data_run/data.pkl'
 
 time_step=50
 
 debug=False
 debug_sig_name='cer_rot'
 
-scalar_sig_names=['dstdenp','dssdenest','iptipp',
-                  'bt','DUSTRIPPED','ip','N1ICWMTH','N1IIWMTH','echpwr','dsifbonoff']
-stability_sig_names=['n1rms']
-nb_sig_names=['pinj','tinj']
+scalar_sig_names=[] #['dstdenp','dssdenest','iptipp',
+                  #'bt','DUSTRIPPED','ip','N1ICWMTH','N1IIWMTH','echpwr','dsifbonoff']
+stability_sig_names=[] #['n1rms']
+nb_sig_names=[] #['pinj','tinj']
 
-efit_profile_sig_names=['qpsi','pres']
-efit_scalar_sig_names=['li','aminor','kappa','tritop','tribot','volume']
+efit_profile_sig_names=[] #['qpsi','pres']
+efit_scalar_sig_names=[] #['li','aminor','kappa','tritop','tribot','volume']
 
 efit_type='EFIT01'
 
-include_psirz=True
-include_rhovn=True
+include_psirz=False
+include_rhovn=False
 
-thomson_sig_names=['density', 'temp']
+thomson_sig_names=[] #['density', 'temp']
 thomson_scale={'density': 1e19, 'temp': 1e3}
 include_thomson_uncertainty=True
 thomson_areas=['CORE','TANGENTIAL']
 
-cer_sig_names=['temp','rot']
+cer_sig_names=[] #['temp','rot']
 cer_scale={'temp': 1e3, 'rot': 1}
 cer_type='cerquick'
 cer_areas=['TANGENTIAL', 'VERTICAL']
 cer_channels={'TANGENTIAL': np.arange(1,33),
               'VERTICAL': np.arange(1,49)}
 
-zipfit_sig_names=['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
+zipfit_sig_names=[] #['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
 
 zipfit_pairs={'cer_temp': 'itempfit',
               'cer_rot': 'trotfit',
               'thomson_temp': 'etempfit',
               'thomson_density': 'edensfit'}
+
+# our PCS algo stuff
+pcs_sig_names=[]
+#['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
+# ['etste', 'etsne','etscr','etsct',
+#                'etstein', 'etsnein','etscrin', 'etsctin','etsinq', 'etsinprs',
+#                'etsteout', 'etsneout', 'etsqout', 'etsprsout',
+#                'etste', 'etsne','etscr','etsct']
+pcs_length={sig_name: np.arange(0,33) for sig_name in pcs_sig_names}
+pcs_length['ftscrot']=np.arange(1,16)
+pcs_length['ftscpsin']=np.arange(1,16)
+pcs_length['ftsc1vld']=np.arange(1,16)
+pcs_length['ftsspsin']=np.arange(1,76)
+pcs_length['ftssrot']=np.arange(1,76)
 
 # psi
 standard_x=np.linspace(0,1,65)
@@ -96,7 +109,7 @@ fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
 fit_functions_1d=['linear_interp_1d', 'mtanh_1d','spline_1d','csaps_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
-trial_fits=['linear_interp_1d','mtanh_1d', 'csaps_1d'] #'linear_interp_1d','spline_1d'] #,'mtanh_1d']
+trial_fits=[] #['linear_interp_1d','mtanh_1d', 'csaps_1d'] #'linear_interp_1d','spline_1d'] #,'mtanh_1d']
 
 name_map={'standard_time': 'time',
           'zipfit_trotfit_rhon_basis': 'rotation',
@@ -274,6 +287,12 @@ for sig_name in zipfit_sig_names:
     zipfit_sig = MdsSignal(r'\ZIPFIT01::TOP.PROFILES.{}'.format(sig_name),'ZIPFIT01',location='remote://atlas.gat.com',dims=['rhon','times'])
     pipeline.fetch('zipfit_{}_full'.format(sig_name),zipfit_sig)
 
+######## FETCH OUR PCS ALGO STUFF #############
+for sig_name in pcs_sig_names:
+    for i in pcs_length[sig_name]:
+        pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
+        pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
+
 @pipeline.map
 def add_timebase(record):
     standard_times=np.arange(tmin,tmax,time_step)
@@ -402,7 +421,8 @@ def map_cer_1d(record):
                     value.append(standardize_time(record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['data'],
                                                   record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
                                                   record['standard_time']))
-                    if sig_name=='rot':
+                    # set to true for rotation if we want to convert km/s to krad/s
+                    if False: #sig_name=='rot':
                         value[-1]=np.divide(value[-1],r)
                     psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
                                 for time_ind in range(len(record['standard_time']))])
@@ -421,6 +441,16 @@ def map_cer_1d(record):
             if trial_fit in fit_functions_1d:
                 record['cer_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
 
+@pipeline.map
+def pcs_processing(record):
+    for sig_name in pcs_sig_names:
+        record['{}'.format(sig_name)]=[]
+        for i in pcs_length[sig_name]:
+            nonzero_inds=np.nonzero(record['{}{}_full'.format(sig_name,i)]['data'])
+            record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
+                                                                  record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
+                                                                  record['standard_time']))
+
 #needed_sigs=[sig_name for sig_name in all_sig_names]
 needed_sigs=[]
 needed_sigs+=[sig_name for sig_name in scalar_sig_names]
@@ -428,6 +458,8 @@ needed_sigs+=[sig_name for sig_name in nb_sig_names]
 needed_sigs+=[sig_name for sig_name in efit_profile_sig_names]
 needed_sigs+=[sig_name for sig_name in efit_scalar_sig_names]
 needed_sigs+=[sig_name for sig_name in stability_sig_names]
+needed_sigs+=[sig_name for sig_name in pcs_sig_names]
+
 if False: #include_psirz:
     needed_sigs+=['psirz','psirz_r','psirz_z']
 if include_rhovn:
@@ -448,10 +480,13 @@ if debug:
     needed_sigs.append('{}_psi_raw_1d'.format(debug_sig_name))
     needed_sigs.append('{}_raw_1d'.format(debug_sig_name))
     needed_sigs.append('{}_uncertainty_raw_1d'.format(debug_sig_name))
-pipeline.keep(needed_sigs)
+# use below to discard unneeded info
+#pipeline.keep(needed_sigs)
 
 records=pipeline.compute_serial()
-#import pdb; pdb.set_trace()
+with open('true_raw.pkl','wb') as f:
+    pickle.dump(records[0],f)
+
 
 
 final_data={}
@@ -467,7 +502,7 @@ for i in range(len(records)):
             # for handling zipfit
             if 'rhon_basis' in sig:
                 final_data[shot][name_map[sig]]=[]
-                rhon=record['zipfit_{}_full'.format('trotfit')]['rhon']
+                rhon=record['zipfit_{}_full'.format(zipfit_sig_names[0])]['rhon']
                 for time_ind in range(len(record['standard_time'])):
                     rho_to_zipfit=my_interp(rhon, 
                                             record[sig][time_ind])
