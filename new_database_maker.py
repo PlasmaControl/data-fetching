@@ -269,6 +269,13 @@ for sig_name in cfg['data']['pcs_sig_names']:
         pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
         pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
 
+######## FETCH BOLOMETRY STUFF #############
+if cfg['data']['include_radiation']:
+    for i in range(1,25):
+        for position in ['L','U']:
+            radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.POWER.BOL_{position}{i:02d}_P',
+                                    'SPECTROSCOPY')
+            pipeline.fetch('{}{}{}_full'.format('prad',position,i),radiation_sig)
 @pipeline.map
 def add_timebase(record):
     standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
@@ -487,7 +494,7 @@ for i in range(len(records)):
                 if name_map[sig]=='curr_target':
                     final_data[shot][name_map[sig]]=final_data[shot][name_map[sig]]*0.5e6
         if cfg['data']['gather_raw'] and 'full' in sig:
-            final_data[shot][sig]=np.array(record[sig])
+            final_data[shot][sig]=record[sig]
     # to accomodate the old code's bug of flipping top and bottom 
     if False:
         tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
