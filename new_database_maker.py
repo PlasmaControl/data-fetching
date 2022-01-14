@@ -24,6 +24,7 @@ import pickle
 
 import sys
 import os
+import time
 
 from scipy import interpolate
 
@@ -37,6 +38,19 @@ import matplotlib.pyplot as plt
 import yaml
 import argparse
 
+# Context manager that we can use to time execution
+class Timer(object):
+    def __init__(self):
+        self.start = None
+        
+    def __enter__(self):
+        self.start = time.time()
+        
+    def __exit__(self, *args):
+        elapsed = time.time() - self.start
+        print('---------------------')
+        print('---> Ran in {0:.2f} s'.format(elapsed))
+
 ###### USER INPUTS ######
 #                       #
 
@@ -48,10 +62,19 @@ args = parser.parse_args()
 with open(args.config_filename,"r") as f:
     cfg=yaml.safe_load(f)
 
+##########################
+
+if cfg['logistics']['num_processes']>1:
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+
+# first_shot_of_year=[0,140838,143703,148158,152159,156197,160938,164773,168439,174574,177976,181675,183948,200000]
+# campaign_names=['old','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021']
 if isinstance(cfg['data']['shots'],str):
-    shots=np.load(cfg['data']['shots'])
+    all_shots=np.load(cfg['data']['shots'])
 else:
-    shots=cfg['data']['shots']
+    all_shots=cfg['data']['shots']
 
 thomson_scale={'density': 1e19, 'temp': 1e3}
 thomson_areas=['CORE','TANGENTIAL']
@@ -123,393 +146,404 @@ name_map={'standard_time': 'time',
 
 #### GATHER DATA ####
 
-pipeline = Pipeline(shots) 
+subshots=[]
+num_files=int(len(all_shots)/(cfg['logistics']['max_shots_per_file']+1)) + 1
+for i in range(num_files):
+    subshots.append(all_shots[i*cfg['logistics']['max_shots_per_file']:min((i+1)*cfg['logistics']['max_shots_per_file'],
+                                                                           len(all_shots))])
+for which_shot,shots in enumerate(subshots):
+    print(f'Starting shot {shots[0]}-{shots[-1]}')
+    pipeline = Pipeline(shots) 
 
-def standardize_time(old_signal,old_timebase,standard_times,
-                     causal=True, window_size=50,
-                     exponential_falloff=False, falloff_rate=100):
-    new_signal=[]
-    for i in range(len(standard_times)):
-        if causal:
-            inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]))[0]
-        else:
-            inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]+window_size))[0]
-        if len(inds_in_range)==0:
-            if len(old_signal.shape)==1:
-                new_signal.append(np.nan)
+    def standardize_time(old_signal,old_timebase,standard_times,
+                         causal=True, window_size=50,
+                         exponential_falloff=False, falloff_rate=100):
+        new_signal=[]
+        for i in range(len(standard_times)):
+            if causal:
+                inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]))[0]
             else:
-                new_signal.append(np.full(old_signal.shape[1:],np.nan))
-        else:
-            if exponential_falloff:
-                weights=np.array([np.exp(- np.abs(standard_times[i]-old_timebase[ind]) / falloff_rate) for ind in inds_in_range])
-                weights/=sum(weights)
-                new_signal.append( np.array( np.sum( [old_signal[ind]*weights[j] for j,ind in enumerate(inds_in_range)], axis=0) ) )
+                inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]+window_size))[0]
+            if len(inds_in_range)==0:
+                if len(old_signal.shape)==1:
+                    new_signal.append(np.nan)
+                else:
+                    new_signal.append(np.full(old_signal.shape[1:],np.nan))
             else:
-                new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
-    return np.array(new_signal)
+                if exponential_falloff:
+                    weights=np.array([np.exp(- np.abs(standard_times[i]-old_timebase[ind]) / falloff_rate) for ind in inds_in_range])
+                    weights/=sum(weights)
+                    new_signal.append( np.array( np.sum( [old_signal[ind]*weights[j] for j,ind in enumerate(inds_in_range)], axis=0) ) )
+                else:
+                    new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
+        return np.array(new_signal)
 
-######## FETCH SCALARS #############
-for sig_name in cfg['data']['scalar_sig_names']:
-    signal=PtDataSignal(sig_name)
-    pipeline.fetch('{}_full'.format(sig_name),signal)
+    ######## FETCH SCALARS #############
+    for sig_name in cfg['data']['scalar_sig_names']:
+        signal=PtDataSignal(sig_name)
+        pipeline.fetch('{}_full'.format(sig_name),signal)
 
-######## FETCH STABILITY #############
-for sig_name in cfg['data']['stability_sig_names']:
-    signal=MdsSignal('.MIRNOV.{}'.format(sig_name),
-                     'MHD',
-                     location='remote://atlas.gat.com')
-    pipeline.fetch('{}_full'.format(sig_name),signal)
+    ######## FETCH STABILITY #############
+    for sig_name in cfg['data']['stability_sig_names']:
+        signal=MdsSignal('.MIRNOV.{}'.format(sig_name),
+                         'MHD',
+                         location='remote://atlas.gat.com')
+        pipeline.fetch('{}_full'.format(sig_name),signal)
 
-######## FETCH SCALARS #############
-for sig_name in cfg['data']['nb_sig_names']:
-    signal=MdsSignal(sig_name,
-                     'NB',
-                     location='remote://atlas.gat.com')
-    pipeline.fetch('{}_full'.format(sig_name),signal)
+    ######## FETCH SCALARS #############
+    for sig_name in cfg['data']['nb_sig_names']:
+        signal=MdsSignal(sig_name,
+                         'NB',
+                         location='remote://atlas.gat.com')
+        pipeline.fetch('{}_full'.format(sig_name),signal)
 
-######## FETCH EFIT PROFILES #############
-for sig_name in cfg['data']['efit_profile_sig_names']:
-    signal=MdsSignal('RESULTS.GEQDSK.{}'.format(sig_name),
-                     cfg['data']['efit_type'],
-                     location='remote://atlas.gat.com',
-                     dims=['psi','times'])
-    pipeline.fetch('{}_full'.format(sig_name),signal)
+    ######## FETCH EFIT PROFILES #############
+    for sig_name in cfg['data']['efit_profile_sig_names']:
+        signal=MdsSignal('RESULTS.GEQDSK.{}'.format(sig_name),
+                         cfg['data']['efit_type'],
+                         location='remote://atlas.gat.com',
+                         dims=['psi','times'])
+        pipeline.fetch('{}_full'.format(sig_name),signal)
 
-######## FETCH EFIT PROFILES #############
-for sig_name in cfg['data']['efit_scalar_sig_names'] :
-    signal=MdsSignal('RESULTS.AEQDSK.{}'.format(sig_name),
-                     cfg['data']['efit_type'],
-                     location='remote://atlas.gat.com')
-    pipeline.fetch('{}_full'.format(sig_name),signal)
-
-
-######## FETCH PSIRZ   #############
-if cfg['data']['include_psirz']:
-    psirz_sig = MdsSignal(r'\psirz',
-                          cfg['data']['efit_type'],
-                          location='remote://atlas.gat.com',
-                          dims=['r','z','times'])
-    pipeline.fetch('psirz_full',psirz_sig)
-    ssimag_sig = MdsSignal(r'\ssimag',
-                          cfg['data']['efit_type'],
-                          location='remote://atlas.gat.com')
-    pipeline.fetch('ssimag_full',ssimag_sig)
-    ssibry_sig = MdsSignal(r'\ssibry',
-                          cfg['data']['efit_type'],
-                          location='remote://atlas.gat.com')
-    pipeline.fetch('ssibry_full',ssibry_sig)
-
-######## FETCH RHOVN ###############
-if cfg['data']['include_rhovn']:
-    rhovn_sig = MdsSignal(r'\rhovn',
-                          cfg['data']['efit_type'],
-                          location='remote://atlas.gat.com',
-                          dims=['psi','times'])
-    pipeline.fetch('rhovn_full',rhovn_sig)
-
-######## FETCH THOMSON #############
-for sig_name in cfg['data']['thomson_sig_names']:
-    for thomson_area in thomson_areas:
-        thomson_sig = MdsSignal(r'TS.BLESSED.{}.{}'.format(thomson_area,sig_name),
-                                'ELECTRONS',
-                                location='remote://atlas.gat.com', 
-                                dims=('times','position'))
-        pipeline.fetch('thomson_{}_{}_full'.format(thomson_area,sig_name),thomson_sig)
-        if cfg['data']['include_thomson_uncertainty']:
-            thomson_error_sig = MdsSignal(r'TS.BLESSED.{}.{}_E'.format(thomson_area,sig_name),
-                                          'ELECTRONS',
-                                          location='remote://atlas.gat.com')
-            pipeline.fetch('thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name),thomson_error_sig)
-
-######## FETCH CER     #############
-if len(cfg['data']['cer_sig_names'])>0:
-    for cer_area in cer_areas:
-        for channel in cer_channels[cer_area]:
-            cer_R_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.R'.format(cfg['data']['cer_type'],
-                                                                     cer_area,
-                                                                     channel),
-                                  'IONS',
-                                  location='remote://atlas.gat.com')
-            pipeline.fetch('cer_{}_{}_R_full'.format(cer_area,channel),cer_R_sig)
-            cer_Z_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.Z'.format(cfg['data']['cer_type'],
-                                                                     cer_area,
-                                                                     channel),
-                                  'IONS',
-                                  location='remote://atlas.gat.com')
-            pipeline.fetch('cer_{}_{}_Z_full'.format(cer_area,channel),cer_Z_sig)
-
-            for sig_name in cfg['data']['cer_sig_names']:
-                correction=''
-                if sig_name=='rot':
-                    correction='c'
-                cer_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.{}'.format(cfg['data']['cer_type'],
-                                                                        cer_area,
-                                                                        channel,
-                                                                        sig_name+correction),
-                                    'IONS',
-                                    location='remote://atlas.gat.com')
-                pipeline.fetch('cer_{}_{}_{}_full'.format(cer_area,sig_name,channel),cer_sig)
-                cer_error_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.{}_ERR'.format(cfg['data']['cer_type'],
-                                                                                  cer_area,
-                                                                                  channel,
-                                                                                  sig_name),
-                                          'IONS',
-                                          location='remote://atlas.gat.com')
-                pipeline.fetch('cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel),cer_error_sig)
+    ######## FETCH EFIT PROFILES #############
+    for sig_name in cfg['data']['efit_scalar_sig_names'] :
+        signal=MdsSignal('RESULTS.AEQDSK.{}'.format(sig_name),
+                         cfg['data']['efit_type'],
+                         location='remote://atlas.gat.com')
+        pipeline.fetch('{}_full'.format(sig_name),signal)
 
 
-######## FETCH ZIPFIT ##############
-for sig_name in cfg['data']['zipfit_sig_names']:
-    zipfit_sig = MdsSignal(r'\ZIPFIT01::TOP.PROFILES.{}'.format(sig_name),'ZIPFIT01',location='remote://atlas.gat.com',dims=['rhon','times'])
-    pipeline.fetch('zipfit_{}_full'.format(sig_name),zipfit_sig)
+    ######## FETCH PSIRZ   #############
+    if cfg['data']['include_psirz']:
+        psirz_sig = MdsSignal(r'\psirz',
+                              cfg['data']['efit_type'],
+                              location='remote://atlas.gat.com',
+                              dims=['r','z','times'])
+        pipeline.fetch('psirz_full',psirz_sig)
+        ssimag_sig = MdsSignal(r'\ssimag',
+                              cfg['data']['efit_type'],
+                              location='remote://atlas.gat.com')
+        pipeline.fetch('ssimag_full',ssimag_sig)
+        ssibry_sig = MdsSignal(r'\ssibry',
+                              cfg['data']['efit_type'],
+                              location='remote://atlas.gat.com')
+        pipeline.fetch('ssibry_full',ssibry_sig)
 
-######## FETCH OUR PCS ALGO STUFF #############
-for sig_name in cfg['data']['pcs_sig_names']:
-    for i in pcs_length[sig_name]:
-        pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
-        pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
+    ######## FETCH RHOVN ###############
+    if cfg['data']['include_rhovn']:
+        rhovn_sig = MdsSignal(r'\rhovn',
+                              cfg['data']['efit_type'],
+                              location='remote://atlas.gat.com',
+                              dims=['psi','times'])
+        pipeline.fetch('rhovn_full',rhovn_sig)
 
-######## FETCH BOLOMETRY STUFF #############
-if cfg['data']['include_radiation']:
-    for i in range(1,25):
-        for position in ['L','U']:
-            radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.POWER.BOL_{position}{i:02d}_P',
-                                    'SPECTROSCOPY')
-            pipeline.fetch('{}{}{}_full'.format('prad',position,i),radiation_sig)
-@pipeline.map
-def add_timebase(record):
-    standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
-    record['standard_time']=standard_times
-
-@pipeline.map
-def change_timebase(record):
-    all_sig_names=cfg['data']['efit_profile_sig_names']+cfg['data']['efit_scalar_sig_names'] +cfg['data']['nb_sig_names']+cfg['data']['scalar_sig_names']+cfg['data']['stability_sig_names']\
-        +[f'zipfit_{sig}' for sig in cfg['data']['zipfit_sig_names']]
-    for sig_name in all_sig_names:
-        try:
-            record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
-                                              record['{}_full'.format(sig_name)]['times'],
-                                              record['standard_time'])
-        except:
-            print('missing {}'.format(sig_name))
-
-if cfg['data']['include_psirz']:
-    @pipeline.map
-    def add_psin(record):
-        psi_norm_f = record['ssibry_full']['data'] - record['ssimag_full']['data']
-        # Prevent divide by 0 error by replacing 0s in the denominator
-        problems = psi_norm_f == 0
-        psi_norm_f[problems] = 1.
-        record['psirz'] = (record['psirz_full']['data'] - record['ssimag_full']['data'][:, np.newaxis, np.newaxis]) / psi_norm_f[:, np.newaxis, np.newaxis]
-        record['psirz'][problems] = 0
-
-        record['psirz']=standardize_time(record['psirz'],
-                                              record['psirz_full']['times'],
-                                              record['standard_time'])
-        record['psirz_r']=record['psirz_full']['r']
-        record['psirz_z']=record['psirz_full']['z']
-
-if cfg['data']['include_rhovn']:
-    @pipeline.map
-    def add_rhovn(record):
-        record['rhovn']=standardize_time(record['rhovn_full']['data'],
-                                         record['rhovn_full']['times'],
-                                         record['standard_time'])
-
-    @pipeline.map
-    def zipfit_rhovn_to_psin(record):
-        for sig_name in cfg['data']['zipfit_sig_names']:
-            record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
-                                                                       record['zipfit_{}_full'.format(sig_name)]['times'],
-                                                                       record['standard_time'])
-
-            rho_to_psi=[my_interp(record['rhovn'][time_ind], 
-                                  record['rhovn_full']['psi']) for time_ind in range(len(record['standard_time']))]
-            record['zipfit_{}_psi'.format(sig_name)]=[]
-            for time_ind in range(len(record['standard_time'])):
-                record['zipfit_{}_psi'.format(sig_name)].append(rho_to_psi[time_ind](record['zipfit_{}_full'.format(sig_name)]['rhon']))
-            record['zipfit_{}_psi'.format(sig_name)]=np.array(record['zipfit_{}_psi'.format(sig_name)])
-
-            zipfit_interp=fit_function_dict['linear_interp_1d']
-            record['zipfit_{}'.format(sig_name)]=zipfit_interp(record['zipfit_{}_psi'.format(sig_name)],
-                                                               record['standard_time'],
-                                                               record['zipfit_{}_rhon_basis'.format(sig_name)],
-                                                               np.ones(record['zipfit_{}_rhon_basis'.format(sig_name)].shape),
-                                                               standard_x)
-    #        record['zipfit_{}'.format(sig_name)]=record['zipfit_{}_full'.format(sig_name)]
-
-@pipeline.map
-def map_thomson_1d(record):
-    # an rz interpolator for each standard time
-    r_z_to_psi=[interpolate.interp2d(record['psirz_r'],
-                                     record['psirz_z'],
-                                     record['psirz'][time_ind]) for time_ind in range(len(record['standard_time']))]
-
+    ######## FETCH THOMSON #############
     for sig_name in cfg['data']['thomson_sig_names']:
-        value=[]
-        psi=[]
-        uncertainty=[]
         for thomson_area in thomson_areas:
-            for channel in range(len(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'])):
-                value.append(standardize_time(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['data'][channel],
-                                              record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['times'],
-                                              record['standard_time']))
-                if thomson_area=='TANGENTIAL':
-                    r=record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'][channel]
-                    z=0
-                elif thomson_area=='CORE':
-                    z=record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'][channel]
-                    r=1.94
-                psi.append([r_z_to_psi[time_ind](r,z)[0] for time_ind in range(len(record['standard_time']))])
-                if cfg['data']['include_thomson_uncertainty']:
-                    uncertainty.append(standardize_time(record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['data'][channel],
-                                              record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['times'],
-                                              record['standard_time']))
-                
-        value=np.array(value).T/thomson_scale[sig_name]
-        psi=np.array(psi).T
-        value[np.isclose(value,0)]=np.nan
-        if cfg['data']['include_thomson_uncertainty']:
-            uncertainty=np.array(uncertainty).T/thomson_scale[sig_name]
-            value[np.isclose(uncertainty,0)]=np.nan
-        else:
-            uncertainty=np.ones(np.shape(value))
-        record['thomson_{}_raw_1d'.format(sig_name)]=value
-        record['thomson_{}_uncertainty_raw_1d'.format(sig_name)]=uncertainty
-        record['thomson_{}_psi_raw_1d'.format(sig_name)]=psi
-        for trial_fit in cfg['data']['trial_fits']:
-            if trial_fit in fit_functions_1d:
-                record['thomson_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
+            thomson_sig = MdsSignal(r'TS.BLESSED.{}.{}'.format(thomson_area,sig_name),
+                                    'ELECTRONS',
+                                    location='remote://atlas.gat.com', 
+                                    dims=('times','position'))
+            pipeline.fetch('thomson_{}_{}_full'.format(thomson_area,sig_name),thomson_sig)
+            if cfg['data']['include_thomson_uncertainty']:
+                thomson_error_sig = MdsSignal(r'TS.BLESSED.{}.{}_E'.format(thomson_area,sig_name),
+                                              'ELECTRONS',
+                                              location='remote://atlas.gat.com')
+                pipeline.fetch('thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name),thomson_error_sig)
 
-@pipeline.map
-def map_cer_1d(record):
-    # an rz interpolator for each standard time
-    r_z_to_psi=[interpolate.interp2d(record['psirz_r'],
-                                     record['psirz_z'],
-                                     record['psirz'][time_ind]) for time_ind in range(len(record['standard_time']))]
-
-    for sig_name in cfg['data']['cer_sig_names']:
-        value=[]
-        psi=[]
-        error=[]
+    ######## FETCH CER     #############
+    if len(cfg['data']['cer_sig_names'])>0:
         for cer_area in cer_areas:
             for channel in cer_channels[cer_area]:
-                if record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)] is not None:
-                    r=standardize_time(record['cer_{}_{}_R_full'.format(cer_area,channel)]['data'],
-                                       record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
-                                       record['standard_time'])
-                    z=standardize_time(record['cer_{}_{}_Z_full'.format(cer_area,channel)]['data'],
-                                       record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
-                                       record['standard_time'])
+                cer_R_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.R'.format(cfg['data']['cer_type'],
+                                                                         cer_area,
+                                                                         channel),
+                                      'IONS',
+                                      location='remote://atlas.gat.com')
+                pipeline.fetch('cer_{}_{}_R_full'.format(cer_area,channel),cer_R_sig)
+                cer_Z_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.Z'.format(cfg['data']['cer_type'],
+                                                                         cer_area,
+                                                                         channel),
+                                      'IONS',
+                                      location='remote://atlas.gat.com')
+                pipeline.fetch('cer_{}_{}_Z_full'.format(cer_area,channel),cer_Z_sig)
 
-                    value.append(standardize_time(record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['data'],
-                                                  record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
-                                                  record['standard_time']))
-                    # set to true for rotation if we want to convert km/s to krad/s
-                    if False: #sig_name=='rot':
-                        value[-1]=np.divide(value[-1],r)
-                    psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
-                                for time_ind in range(len(record['standard_time']))])
-                    error.append(standardize_time(record['cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel)]['data'],
-                                                  record['cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel)]['times'],
-                                                  record['standard_time']))
-        value=np.array(value).T/cer_scale[sig_name]
-        psi=np.array(psi).T
-        error=np.array(error).T
-        value[np.where(error==1)]=np.nan
-        uncertainty=np.ones(np.shape(value))
-        record['cer_{}_raw_1d'.format(sig_name)]=value
-        record['cer_{}_uncertainty_raw_1d'.format(sig_name)]=uncertainty
-        record['cer_{}_psi_raw_1d'.format(sig_name)]=psi
-        for trial_fit in cfg['data']['trial_fits']:
-            if trial_fit in fit_functions_1d:
-                record['cer_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
+                for sig_name in cfg['data']['cer_sig_names']:
+                    correction=''
+                    if sig_name=='rot':
+                        correction='c'
+                    cer_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.{}'.format(cfg['data']['cer_type'],
+                                                                            cer_area,
+                                                                            channel,
+                                                                            sig_name+correction),
+                                        'IONS',
+                                        location='remote://atlas.gat.com')
+                    pipeline.fetch('cer_{}_{}_{}_full'.format(cer_area,sig_name,channel),cer_sig)
+                    cer_error_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.{}_ERR'.format(cfg['data']['cer_type'],
+                                                                                      cer_area,
+                                                                                      channel,
+                                                                                      sig_name),
+                                              'IONS',
+                                              location='remote://atlas.gat.com')
+                    pipeline.fetch('cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel),cer_error_sig)
 
-@pipeline.map
-def pcs_processing(record):
+
+    ######## FETCH ZIPFIT ##############
+    for sig_name in cfg['data']['zipfit_sig_names']:
+        zipfit_sig = MdsSignal(r'\ZIPFIT01::TOP.PROFILES.{}'.format(sig_name),'ZIPFIT01',location='remote://atlas.gat.com',dims=['rhon','times'])
+        pipeline.fetch('zipfit_{}_full'.format(sig_name),zipfit_sig)
+
+    ######## FETCH OUR PCS ALGO STUFF #############
     for sig_name in cfg['data']['pcs_sig_names']:
-        record['{}'.format(sig_name)]=[]
         for i in pcs_length[sig_name]:
-            nonzero_inds=np.nonzero(record['{}{}_full'.format(sig_name,i)]['data'])
-            record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
-                                                                  record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
-                                                                  record['standard_time']))
+            pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
+            pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
 
-if not cfg['data']['gather_raw']:
-    needed_sigs=[]
-    needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
-    needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
-    needed_sigs+=[sig_name for sig_name in cfg['data']['efit_profile_sig_names']]
-    needed_sigs+=[sig_name for sig_name in cfg['data']['efit_scalar_sig_names'] ]
-    needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
-    needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
+    ######## FETCH BOLOMETRY STUFF #############
+    if cfg['data']['include_radiation']:
+        for i in range(1,25):
+            for position in ['L','U']:
+                radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.POWER.BOL_{position}{i:02d}_P',
+                                        'SPECTROSCOPY')
+                pipeline.fetch('{}{}{}_full'.format('prad',position,i),radiation_sig)
+    @pipeline.map
+    def add_timebase(record):
+        standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
+        record['standard_time']=standard_times
+
+    @pipeline.map
+    def change_timebase(record):
+        all_sig_names=cfg['data']['efit_profile_sig_names']+cfg['data']['efit_scalar_sig_names'] +cfg['data']['nb_sig_names']+cfg['data']['scalar_sig_names']+cfg['data']['stability_sig_names']\
+            +[f'zipfit_{sig}' for sig in cfg['data']['zipfit_sig_names']]
+        for sig_name in all_sig_names:
+            try:
+                record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
+                                                  record['{}_full'.format(sig_name)]['times'],
+                                                  record['standard_time'])
+            except:
+                print('missing {}'.format(sig_name))
 
     if cfg['data']['include_psirz']:
-        needed_sigs+=['psirz','psirz_r','psirz_z']
+        @pipeline.map
+        def add_psin(record):
+            psi_norm_f = record['ssibry_full']['data'] - record['ssimag_full']['data']
+            # Prevent divide by 0 error by replacing 0s in the denominator
+            problems = psi_norm_f == 0
+            psi_norm_f[problems] = 1.
+            record['psirz'] = (record['psirz_full']['data'] - record['ssimag_full']['data'][:, np.newaxis, np.newaxis]) / psi_norm_f[:, np.newaxis, np.newaxis]
+            record['psirz'][problems] = 0
+
+            record['psirz']=standardize_time(record['psirz'],
+                                                  record['psirz_full']['times'],
+                                                  record['standard_time'])
+            record['psirz_r']=record['psirz_full']['r']
+            record['psirz_z']=record['psirz_full']['z']
+
     if cfg['data']['include_rhovn']:
-        needed_sigs+=['rhovn']
+        @pipeline.map
+        def add_rhovn(record):
+            record['rhovn']=standardize_time(record['rhovn_full']['data'],
+                                             record['rhovn_full']['times'],
+                                             record['standard_time'])
 
-    for trial_fit in cfg['data']['trial_fits']:
-        needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
-        needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
-    needed_sigs+=['zipfit_{}_rhon_basis'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-    needed_sigs+=['zipfit_{}'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-    needed_sigs.append('standard_time')
-    # use below to discard unneeded info
-    pipeline.keep(needed_sigs)
-####### TAKE THIS OUT FOR NEWER MODELS, UNCOMMENT ABOVE ############
-#needed_sigs+=['zipfit_{}_full'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-#needed_sigs+=['pinj_full','dstdenp_full','iptipp_full','volume_full','tinj_full']
-#needed_sigs+=['n1rms_full']
-###############################################
-if cfg['logistics']['debug']:
-    needed_sigs.append('{}_psi_raw_1d'.format(cfg['logistics']['debug_sig_name']))
-    needed_sigs.append('{}_raw_1d'.format(cfg['logistics']['debug_sig_name']))
-    needed_sigs.append('{}_uncertainty_raw_1d'.format(cfg['logistics']['debug_sig_name']))
+        @pipeline.map
+        def zipfit_rhovn_to_psin(record):
+            for sig_name in cfg['data']['zipfit_sig_names']:
+                record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
+                                                                           record['zipfit_{}_full'.format(sig_name)]['times'],
+                                                                           record['standard_time'])
 
-records=pipeline.compute_serial()
-
-final_data={}
-raw_data={}
-for i in range(len(records)):
-    record=records[i]
-    shot=int(record['shot'])
-    final_data[shot]={}
-    final_data[shot]['t_ip_flat']=np.array(cfg['data']['tmin'])
-    final_data[shot]['ip_flat_duration']=np.array(cfg['data']['tmax'])
-    #final_data[shot]['topology']='SNB'
-    for sig in record.keys():
-        if sig in name_map:
-            # for handling zipfit
-            if 'rhon_basis' in sig:
-                final_data[shot][name_map[sig]]=[]
-                rhon=record['zipfit_{}_full'.format(cfg['data']['zipfit_sig_names'][0])]['rhon']
+                rho_to_psi=[my_interp(record['rhovn'][time_ind], 
+                                      record['rhovn_full']['psi']) for time_ind in range(len(record['standard_time']))]
+                record['zipfit_{}_psi'.format(sig_name)]=[]
                 for time_ind in range(len(record['standard_time'])):
-                    rho_to_zipfit=my_interp(rhon, 
-                                            record[sig][time_ind])
-                    final_data[shot][name_map[sig]].append(rho_to_zipfit(standard_x))
-                final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
+                    record['zipfit_{}_psi'.format(sig_name)].append(rho_to_psi[time_ind](record['zipfit_{}_full'.format(sig_name)]['rhon']))
+                record['zipfit_{}_psi'.format(sig_name)]=np.array(record['zipfit_{}_psi'.format(sig_name)])
+
+                zipfit_interp=fit_function_dict['linear_interp_1d']
+                record['zipfit_{}'.format(sig_name)]=zipfit_interp(record['zipfit_{}_psi'.format(sig_name)],
+                                                                   record['standard_time'],
+                                                                   record['zipfit_{}_rhon_basis'.format(sig_name)],
+                                                                   np.ones(record['zipfit_{}_rhon_basis'.format(sig_name)].shape),
+                                                                   standard_x)
+        #        record['zipfit_{}'.format(sig_name)]=record['zipfit_{}_full'.format(sig_name)]
+
+    @pipeline.map
+    def map_thomson_1d(record):
+        # an rz interpolator for each standard time
+        r_z_to_psi=[interpolate.interp2d(record['psirz_r'],
+                                         record['psirz_z'],
+                                         record['psirz'][time_ind]) for time_ind in range(len(record['standard_time']))]
+
+        for sig_name in cfg['data']['thomson_sig_names']:
+            value=[]
+            psi=[]
+            uncertainty=[]
+            for thomson_area in thomson_areas:
+                for channel in range(len(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'])):
+                    value.append(standardize_time(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['data'][channel],
+                                                  record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['times'],
+                                                  record['standard_time']))
+                    if thomson_area=='TANGENTIAL':
+                        r=record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'][channel]
+                        z=0
+                    elif thomson_area=='CORE':
+                        z=record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'][channel]
+                        r=1.94
+                    psi.append([r_z_to_psi[time_ind](r,z)[0] for time_ind in range(len(record['standard_time']))])
+                    if cfg['data']['include_thomson_uncertainty']:
+                        uncertainty.append(standardize_time(record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['data'][channel],
+                                                  record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['times'],
+                                                  record['standard_time']))
+
+            value=np.array(value).T/thomson_scale[sig_name]
+            psi=np.array(psi).T
+            value[np.isclose(value,0)]=np.nan
+            if cfg['data']['include_thomson_uncertainty']:
+                uncertainty=np.array(uncertainty).T/thomson_scale[sig_name]
+                value[np.isclose(uncertainty,0)]=np.nan
             else:
-                final_data[shot][name_map[sig]]=np.array(record[sig])
-                if name_map[sig]=='curr_target':
-                    final_data[shot][name_map[sig]]=final_data[shot][name_map[sig]]*0.5e6
-        if cfg['data']['gather_raw'] and 'full' in sig:
-            final_data[shot][sig]=record[sig]
-    # to accomodate the old code's bug of flipping top and bottom 
-    if False:
-        tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
-        final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
-        final_data[shot]['triangularity_bot_EFIT01']=tmp
-        final_data[shot]['pinj_full']=record['pinj_full']
-        final_data[shot]['tinj_full']=record['tinj_full']
-        final_data[shot]['iptipp_full']=record['iptipp_full']
-        final_data[shot]['iptipp_full']['data']*=.5e6
-        final_data[shot]['dstdenp_full']=record['dstdenp_full']
-        final_data[shot]['volume_full']=record['volume_full']
-        final_data[shot]['n1rms_full']=record['n1rms_full']
-                
-with open(cfg['logistics']['output_file'],'wb') as f:
-    pickle.dump(final_data, f)
+                uncertainty=np.ones(np.shape(value))
+            record['thomson_{}_raw_1d'.format(sig_name)]=value
+            record['thomson_{}_uncertainty_raw_1d'.format(sig_name)]=uncertainty
+            record['thomson_{}_psi_raw_1d'.format(sig_name)]=psi
+            for trial_fit in cfg['data']['trial_fits']:
+                if trial_fit in fit_functions_1d:
+                    record['thomson_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
+
+    @pipeline.map
+    def map_cer_1d(record):
+        # an rz interpolator for each standard time
+        r_z_to_psi=[interpolate.interp2d(record['psirz_r'],
+                                         record['psirz_z'],
+                                         record['psirz'][time_ind]) for time_ind in range(len(record['standard_time']))]
+
+        for sig_name in cfg['data']['cer_sig_names']:
+            value=[]
+            psi=[]
+            error=[]
+            for cer_area in cer_areas:
+                for channel in cer_channels[cer_area]:
+                    if record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)] is not None:
+                        r=standardize_time(record['cer_{}_{}_R_full'.format(cer_area,channel)]['data'],
+                                           record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
+                                           record['standard_time'])
+                        z=standardize_time(record['cer_{}_{}_Z_full'.format(cer_area,channel)]['data'],
+                                           record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
+                                           record['standard_time'])
+
+                        value.append(standardize_time(record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['data'],
+                                                      record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
+                                                      record['standard_time']))
+                        # set to true for rotation if we want to convert km/s to krad/s
+                        if False: #sig_name=='rot':
+                            value[-1]=np.divide(value[-1],r)
+                        psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
+                                    for time_ind in range(len(record['standard_time']))])
+                        error.append(standardize_time(record['cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel)]['data'],
+                                                      record['cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel)]['times'],
+                                                      record['standard_time']))
+            value=np.array(value).T/cer_scale[sig_name]
+            psi=np.array(psi).T
+            error=np.array(error).T
+            value[np.where(error==1)]=np.nan
+            uncertainty=np.ones(np.shape(value))
+            record['cer_{}_raw_1d'.format(sig_name)]=value
+            record['cer_{}_uncertainty_raw_1d'.format(sig_name)]=uncertainty
+            record['cer_{}_psi_raw_1d'.format(sig_name)]=psi
+            for trial_fit in cfg['data']['trial_fits']:
+                if trial_fit in fit_functions_1d:
+                    record['cer_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
+
+    @pipeline.map
+    def pcs_processing(record):
+        for sig_name in cfg['data']['pcs_sig_names']:
+            record['{}'.format(sig_name)]=[]
+            for i in pcs_length[sig_name]:
+                nonzero_inds=np.nonzero(record['{}{}_full'.format(sig_name,i)]['data'])
+                record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
+                                                                      record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
+                                                                      record['standard_time']))
+
+    if not cfg['data']['gather_raw']:
+        needed_sigs=[]
+        needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
+        needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
+        needed_sigs+=[sig_name for sig_name in cfg['data']['efit_profile_sig_names']]
+        needed_sigs+=[sig_name for sig_name in cfg['data']['efit_scalar_sig_names'] ]
+        needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
+        needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
+
+        if cfg['data']['include_psirz']:
+            needed_sigs+=['psirz','psirz_r','psirz_z']
+        if cfg['data']['include_rhovn']:
+            needed_sigs+=['rhovn']
+
+        for trial_fit in cfg['data']['trial_fits']:
+            needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
+            needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
+        needed_sigs+=['zipfit_{}_rhon_basis'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+        needed_sigs+=['zipfit_{}'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+        needed_sigs.append('standard_time')
+        # use below to discard unneeded info
+        pipeline.keep(needed_sigs)
+    ####### TAKE THIS OUT FOR NEWER MODELS, UNCOMMENT ABOVE ############
+    #needed_sigs+=['zipfit_{}_full'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+    #needed_sigs+=['pinj_full','dstdenp_full','iptipp_full','volume_full','tinj_full']
+    #needed_sigs+=['n1rms_full']
+    ###############################################
+    if cfg['logistics']['debug']:
+        needed_sigs.append('{}_psi_raw_1d'.format(cfg['logistics']['debug_sig_name']))
+        needed_sigs.append('{}_raw_1d'.format(cfg['logistics']['debug_sig_name']))
+        needed_sigs.append('{}_uncertainty_raw_1d'.format(cfg['logistics']['debug_sig_name']))
+
+    with Timer():
+        if cfg['logistics']['num_processes']>1:
+            records=pipeline.compute_spark(numparts=cfg['logistics']['num_processes'])
+        else:
+            records=pipeline.compute_serial()
+
+    final_data={}
+    raw_data={}
+    for i in range(len(records)):
+        record=records[i]
+        shot=int(record['shot'])
+        final_data[shot]={}
+        final_data[shot]['t_ip_flat']=np.array(cfg['data']['tmin'])
+        final_data[shot]['ip_flat_duration']=np.array(cfg['data']['tmax'])
+        #final_data[shot]['topology']='SNB'
+        for sig in record.keys():
+            if sig in name_map:
+                # for handling zipfit
+                if 'rhon_basis' in sig:
+                    final_data[shot][name_map[sig]]=[]
+                    rhon=record['zipfit_{}_full'.format(cfg['data']['zipfit_sig_names'][0])]['rhon']
+                    for time_ind in range(len(record['standard_time'])):
+                        rho_to_zipfit=my_interp(rhon, 
+                                                record[sig][time_ind])
+                        final_data[shot][name_map[sig]].append(rho_to_zipfit(standard_x))
+                    final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
+                else:
+                    final_data[shot][name_map[sig]]=np.array(record[sig])
+                    if name_map[sig]=='curr_target':
+                        final_data[shot][name_map[sig]]=final_data[shot][name_map[sig]]*0.5e6
+            if cfg['data']['gather_raw'] and 'full' in sig:
+                final_data[shot][sig]=record[sig]
+        # to accomodate the old code's bug of flipping top and bottom 
+        if False:
+            tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
+            final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
+            final_data[shot]['triangularity_bot_EFIT01']=tmp
+            final_data[shot]['pinj_full']=record['pinj_full']
+            final_data[shot]['tinj_full']=record['tinj_full']
+            final_data[shot]['iptipp_full']=record['iptipp_full']
+            final_data[shot]['iptipp_full']['data']*=.5e6
+            final_data[shot]['dstdenp_full']=record['dstdenp_full']
+            final_data[shot]['volume_full']=record['volume_full']
+            final_data[shot]['n1rms_full']=record['n1rms_full']
+
+    with open(f"{cfg['logistics']['output_file']}_{which_shot}",'wb') as f:
+        pickle.dump(final_data, f)
 
 if cfg['logistics']['debug']:
     for shot in final_data:

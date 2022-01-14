@@ -1,7 +1,7 @@
 data:
-#shots=np.load('data/2021_shots.npy')
+#shots=np.load('new_shots.npy')
 #shots = [187076] #[185769] #[163303,175970] #175970 is Colin's good modulation shot; 154764 is David Eldon's
-  shots: 'data/2021_shots.npy'
+  shots: [163303,187076]
   tmin: 0
   tmax: 6000
   time_step: 50
@@ -38,8 +38,8 @@ data:
 #['linear_interp_1d','mtanh_1d', 'csaps_1d'] #'linear_interp_1d','spline_1d'] #,'mtanh_1d']
   trial_fits: []
 logistics:
-  output_file: '/mnt/beegfs/users/abbatej/miscellaneous_scalars.pkl'
+  output_file: '/mnt/beegfs/users/abbatej/quick_test.pkl'
   debug: False
   debug_sig_name: 'cer_rot'
   num_processes: 1
-  max_shots_per_file: 1000
+  max_shots_per_file: 2

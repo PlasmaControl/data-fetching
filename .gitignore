@@ -6,4 +6,3 @@ __pycache__*
 *.pkl
 astrolibpy
 data
-*rbf*
