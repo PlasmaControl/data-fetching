@@ -75,6 +75,7 @@ if isinstance(cfg['data']['shots'],str):
     all_shots=np.load(cfg['data']['shots'])
 else:
     all_shots=cfg['data']['shots']
+all_shots=sorted(all_shots)
 
 thomson_scale={'density': 1e19, 'temp': 1e3}
 thomson_areas=['CORE','TANGENTIAL']
@@ -436,7 +437,7 @@ for which_shot,shots in enumerate(subshots):
                                                       record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
                                                       record['standard_time']))
                         # set to true for rotation if we want to convert km/s to krad/s
-                        if False: #sig_name=='rot':
+                        if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_kHz']): 
                             value[-1]=np.divide(value[-1],r)
                         psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
                                     for time_ind in range(len(record['standard_time']))])
@@ -541,8 +542,11 @@ for which_shot,shots in enumerate(subshots):
             final_data[shot]['dstdenp_full']=record['dstdenp_full']
             final_data[shot]['volume_full']=record['volume_full']
             final_data[shot]['n1rms_full']=record['n1rms_full']
-
-    with open(f"{cfg['logistics']['output_file']}_{which_shot}",'wb') as f:
+    if num_files==1:
+        true_filename=f"{cfg['logistics']['output_file']}"
+    else:
+        true_filename=f"{cfg['logistics']['output_file']}_{which_shot}"
+    with open(true_filename,'wb') as f:
         pickle.dump(final_data, f)
 
 if cfg['logistics']['debug']:
