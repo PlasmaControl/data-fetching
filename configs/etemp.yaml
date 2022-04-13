@@ -1,0 +1,46 @@
+data:
+#shots=np.load('new_shots.npy')
+#shots = [187076] #[185769] #[163303,175970] #175970 is Colin's good modulation shot; 154764 is David Eldon's
+  shots: [131498,131499,131711,142107,142110,142111]
+  tmin: 0
+  tmax: 6000
+  time_step: 50
+  gather_raw: False
+  #f'esl019'] #f'bmspinj{i}{j}' for i in ['30','15','21','33'] for j in ['l','r']] #['dstdenp','dssdenest','iptipp',
+  #'bt','DUSTRIPPED','ip','N1ICWMTH','N1IIWMTH','echpwr','dsifbonoff']
+  scalar_sig_names: ['dstdenp','dssdenest','ipsiptargt','ip','bt', 'vloop',
+                    'gasA', 'gasB', 'gasC', 'gasD', 'gasE', 'pfx1', 'pfx2', 'echpwr']
+  #n1rms
+  stability_sig_names: ['n1rms','n2rms','n3rms']
+  nb_sig_names: ['pinj','tinj']
+  efit_profile_sig_names: ['qpsi','pres']
+  efit_scalar_sig_names: ['li','aminor','kappa','tritop','tribot','volume','betan','betap','rmaxis', 'zmaxis','wmhd','drsep','zxpt1','zxpt2','rxpt1','rxpt2','drsep']
+  efit_type: 'EFIT01'
+  include_psirz: False
+  include_rhovn: True
+#['density', 'temp']
+  thomson_sig_names: []
+  include_thomson_uncertainty: True
+#['temp','rot']
+  cer_sig_names: []
+  cer_type: []
+  cer_rotation_units_of_kHz: True
+#['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
+  zipfit_sig_names: ['trotfit','edensfit','etempfit','itempfit']
+#['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
+# ['etste', 'etsne','etscr','etsct',
+#                'etstein', 'etsnein','etscrin', 'etsctin','etsinq', 'etsinprs',
+#                'etsteout', 'etsneout', 'etsqout', 'etsprsout',
+#                'etste', 'etsne','etscr','etsct']
+  pcs_sig_names: []
+  include_radiation: False
+#65
+  num_x_points: 65
+#['linear_interp_1d','mtanh_1d', 'csaps_1d'] #'linear_interp_1d','spline_1d'] #,'mtanh_1d']
+  trial_fits: ['csaps_1d']
+logistics:
+  output_file: data.pkl
+  debug: False
+  debug_sig_name: 'cer_rot'
+  num_processes: 1
+  max_shots_per_file: 1000

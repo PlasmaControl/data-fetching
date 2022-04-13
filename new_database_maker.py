@@ -5,7 +5,7 @@ Saves data to pickle files with a single time array
 
 Author: Joe Abbate & Oak Nelson (Nov 22 2020)
 
-INPUTS: 
+INPUTS:
  - shots      (list)    | a list of shots to include
  - tmin       (float)   | minimum time to include in output
  - tmax       (float)   | maximum time to include in output
@@ -42,10 +42,10 @@ import argparse
 class Timer(object):
     def __init__(self):
         self.start = None
-        
+
     def __enter__(self):
         self.start = time.time()
-        
+
     def __exit__(self, *args):
         elapsed = time.time() - self.start
         print('---------------------')
@@ -117,10 +117,20 @@ name_map={'standard_time': 'time',
           'zipfit_itempfit': 'itemp',
           'zipfit_etempfit': 'temp',
           'zipfit_edensfit': 'dens',
+          'vloop': 'vloop',
           'aminor': 'a_{}'.format(cfg['data']['efit_type']),
           'li': 'li_{}'.format(cfg['data']['efit_type']),
           'kappa': 'kappa_{}'.format(cfg['data']['efit_type']),
           'volume': 'volume_{}'.format(cfg['data']['efit_type']),
+          'betan': 'betan',
+          'betap': 'betap',
+          'drsep': 'drsep_{}'.format(cfg['data']['efit_type']),
+          'rmaxis': 'rmagx_{}'.format(cfg['data']['efit_type']),
+          'zmaxis': 'zmagX_{}'.format(cfg['data']['efit_type']),
+          'zxpt1': 'zxpt1_{}'.format(cfg['data']['efit_type']),
+          'zxpt2': 'zxpt1_{}'.format(cfg['data']['efit_type']),
+          'rxpt1': 'zxpt1_{}'.format(cfg['data']['efit_type']),
+          'rxpt2': 'zxpt1_{}'.format(cfg['data']['efit_type']),
           'tritop': 'triangularity_top_{}'.format(cfg['data']['efit_type']),
           'tribot': 'triangularity_bot_{}'.format(cfg['data']['efit_type']),
           'qpsi': 'q_{}'.format(cfg['data']['efit_type']),
@@ -129,14 +139,25 @@ name_map={'standard_time': 'time',
           'tinj': 'tinj',
           'dstdenp': 'target_density',
           'dssdenest': 'density_estimate',
-          'iptipp': 'curr_target',
+          'ipsiptargt': 'curr_target',
           'echpwr': 'ech',
           'dsifbonoff': 'gas_feedback',
           'DUSTRIPPED': 'dud_trip',
           'bt': 'bt',
           'ip': 'curr',
+          'gasA': 'gasA',
+          'gasB': 'gasB',
+          'gasC': 'gasC',
+          'gasD': 'gasD',
+          'gasE': 'gasE',
+          'pfx1': 'pfx1',
+          'pfx2': 'pfx2',
           'N1ICWMTH': 'C_coil_method',
-          'N1IIWMTH': 'I_coil_method'}
+          'N1IIWMTH': 'I_coil_method',
+          'n1rms': 'n1rms',
+          'n2rms': 'n2rms',
+          'n3rms': 'n3rms',
+          'wmhd': 'wmhd'}
 
 #                       #
 #### END USER INPUTS ####
@@ -154,7 +175,7 @@ for i in range(num_files):
                                                                            len(all_shots))])
 for which_shot,shots in enumerate(subshots):
     print(f'Starting shot {shots[0]}-{shots[-1]}')
-    pipeline = Pipeline(shots) 
+    pipeline = Pipeline(shots)
 
     def standardize_time(old_signal,old_timebase,standard_times,
                          causal=True, window_size=50,
@@ -208,7 +229,7 @@ for which_shot,shots in enumerate(subshots):
 
     ######## FETCH EFIT PROFILES #############
     for sig_name in cfg['data']['efit_scalar_sig_names'] :
-        signal=MdsSignal('RESULTS.AEQDSK.{}'.format(sig_name),
+        signal=MdsSignal(r'\{}'.format(sig_name.upper()),
                          cfg['data']['efit_type'],
                          location='remote://atlas.gat.com')
         pipeline.fetch('{}_full'.format(sig_name),signal)
@@ -243,7 +264,7 @@ for which_shot,shots in enumerate(subshots):
         for thomson_area in thomson_areas:
             thomson_sig = MdsSignal(r'TS.BLESSED.{}.{}'.format(thomson_area,sig_name),
                                     'ELECTRONS',
-                                    location='remote://atlas.gat.com', 
+                                    location='remote://atlas.gat.com',
                                     dims=('times','position'))
             pipeline.fetch('thomson_{}_{}_full'.format(thomson_area,sig_name),thomson_sig)
             if cfg['data']['include_thomson_uncertainty']:
@@ -321,6 +342,21 @@ for which_shot,shots in enumerate(subshots):
                 record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
                                                   record['{}_full'.format(sig_name)]['times'],
                                                   record['standard_time'])
+                # kludged fix to exclude 'zipfit_' from the name here
+                if (sig_name[7:] in cfg['data']['zipfit_sig_names']):
+                    data=[]
+                    for time_ind in range(len(record[sig_name])):
+                        interpolator=interpolate.interp1d(record[f'{sig_name}_full']['rhon'],
+                                                          record[sig_name][time_ind,:])
+                        data.append(interpolator(standard_x))
+                    record[sig_name]=np.array(data)
+                if (sig_name in cfg['data']['efit_profile_sig_names']):
+                    data=[]
+                    for time_ind in range(len(record[sig_name])):
+                        interpolator=interpolate.interp1d(record[f'{sig_name}_full']['psi'],
+                                                          record[sig_name][time_ind,:])
+                        data.append(interpolator(standard_x))
+                    record[sig_name]=np.array(data)
             except:
                 print('missing {}'.format(sig_name))
 
@@ -346,15 +382,14 @@ for which_shot,shots in enumerate(subshots):
             record['rhovn']=standardize_time(record['rhovn_full']['data'],
                                              record['rhovn_full']['times'],
                                              record['standard_time'])
-
-        @pipeline.map
+#        @pipeline.map
         def zipfit_rhovn_to_psin(record):
             for sig_name in cfg['data']['zipfit_sig_names']:
                 record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
                                                                            record['zipfit_{}_full'.format(sig_name)]['times'],
                                                                            record['standard_time'])
 
-                rho_to_psi=[my_interp(record['rhovn'][time_ind], 
+                rho_to_psi=[my_interp(record['rhovn'][time_ind],
                                       record['rhovn_full']['psi']) for time_ind in range(len(record['standard_time']))]
                 record['zipfit_{}_psi'.format(sig_name)]=[]
                 for time_ind in range(len(record['standard_time'])):
@@ -437,7 +472,7 @@ for which_shot,shots in enumerate(subshots):
                                                       record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
                                                       record['standard_time']))
                         # set to true for rotation if we want to convert km/s to krad/s
-                        if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_kHz']): 
+                        if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_kHz']):
                             value[-1]=np.divide(value[-1],r)
                         psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
                                     for time_ind in range(len(record['standard_time']))])
@@ -520,7 +555,7 @@ for which_shot,shots in enumerate(subshots):
                     final_data[shot][name_map[sig]]=[]
                     rhon=record['zipfit_{}_full'.format(cfg['data']['zipfit_sig_names'][0])]['rhon']
                     for time_ind in range(len(record['standard_time'])):
-                        rho_to_zipfit=my_interp(rhon, 
+                        rho_to_zipfit=my_interp(rhon,
                                                 record[sig][time_ind])
                         final_data[shot][name_map[sig]].append(rho_to_zipfit(standard_x))
                     final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
@@ -530,7 +565,9 @@ for which_shot,shots in enumerate(subshots):
                         final_data[shot][name_map[sig]]=final_data[shot][name_map[sig]]*0.5e6
             if cfg['data']['gather_raw'] and 'full' in sig:
                 final_data[shot][sig]=record[sig]
-        # to accomodate the old code's bug of flipping top and bottom 
+        for sig in ['ech', 'gasE']:
+            final_data[shot][sig]=np.zeros(len(final_data[shot]['time']))
+        # to accomodate the old code's bug of flipping top and bottom
         if False:
             tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
             final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
@@ -591,7 +628,7 @@ if cfg['logistics']['debug']:
         plt.xlabel('time (unit: {})'.format(records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['units']['times']))
         plt.ylabel('{} (unit: {})'.format(cfg['logistics']['debug_sig_name'], records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['units']['data']))
         plt.show()
-    
+
     if cfg['logistics']['debug_sig_name'] in cfg['data']['efit_profile_sig_names']:
         xlist=[standard_x]
         ylist=[records[0]['{}'.format(cfg['logistics']['debug_sig_name'])]]
@@ -604,4 +641,4 @@ if cfg['logistics']['debug']:
                                   xlabel='psi',
                                   uncertaintylist=uncertaintylist,
                                   labels=labels)
-        
+
