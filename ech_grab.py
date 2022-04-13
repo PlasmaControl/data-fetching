@@ -12,6 +12,10 @@ for shot in shots:
         data_dic[shot]={}
         data_dic[shot]['ECP']=dict(OMFIT['TRANSP_for_RF']['UFILES']['ECP'])
         data_dic[shot]['ECP']['SCALARS']=dict(data_dic[shot]['ECP']['SCALARS'])
+        for key in ['RFMODECH','XECECH','ZECECH','FREQECH']:
+            data_dic[shot][key]=np.array(OMFIT['TRANSP_for_RF']['INPUTS']['TRANSP']['ELECTRON_CYCLOTRON_RESONANCE_HEATING_TORAY'][key])
+        for key in ['ECB_WIDTH_HOR','ECB_WIDTH_VERT','ECB_CURV_HOR','ECB_CURV_VERT']:
+            data_dic[shot][key]=np.array(OMFIT['TRANSP_for_RF']['INPUTS']['TRANSP']['ELECTRON_CYCLOTRON_RESONANCE_HEATING_TORBEAM'][key])
         if 'ECA' in OMFIT['TRANSP_for_RF']['UFILES'] and 'ECB' in OMFIT['TRANSP_for_RF']['UFILES']:
             data_dic[shot]['THE']=dict(OMFIT['TRANSP_for_RF']['UFILES']['ECA'])
             data_dic[shot]['THE']['SCALARS']=dict(data_dic[shot]['THE']['SCALARS'])
