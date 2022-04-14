@@ -1,20 +1,7 @@
-#!/usr/bin/env python
-'''
-Simple script to utilize toksearch capabilities to build a Thomson ne database
-Saves data to pickle files with a single time array
+# run to generate a file called data_experiment.pkl
+# used by plot_any_shot_fully.py
 
-Author: Joe Abbate & Oak Nelson (Nov 22 2020)
-
-INPUTS: 
- - shots      (list)    | a list of shots to include
- - tmin       (float)   | minimum time to include in output
- - tmax       (float)   | maximum time to include in output
- - outdir     (string)  | output directory for pkl files
-
-OUTPUTS:
- - <shot>.pkl (pkl)     | a pickle file with the ECE output
-'''
-
+# requires module load toksearch
 
 from toksearch import PtDataSignal, MdsSignal, Pipeline
 import numpy as np
@@ -27,10 +14,11 @@ import os
 
 from scipy import interpolate
 
-sys.path.append(os.path.join(os.path.dirname(__file__),'lib'))
+sys.path.append(os.path.join(os.path.dirname(__file__),'../lib'))
 from transport_helpers import my_interp, interp_ND_rectangular
 import fit_functions
 from plot_tools import plot_comparison_over_time, plot_2d_comparison
+
 
 import matplotlib.pyplot as plt
 
@@ -38,7 +26,7 @@ import matplotlib.pyplot as plt
 #                       #
 
 #shots=np.load('shots.npy')
-shots = [187074] #np.arange(187065,187080) #[187066,187068,187069] #[917609] #[185769] #[163303,175970] #175970 is Colin's good modulation shot; 154764 is David Eldon's
+shots = [187076] #np.arange(187065,187080) #[187066,187068,187069] #[917609] #[185769] #[163303,175970] #175970 is Colin's good modulation shot; 154764 is David Eldon's
 
 tmin = -2000
 tmax = 5000
@@ -51,9 +39,9 @@ debug=False
 debug_sig_name='cer_rot'
 
 scalar_sig_names=['etswchprop']
-# for sig in ['etsinpwr','etsintor','etsinden','etsincur']:
-#     for i in range(7):
-#         scalar_sig_names.append('{}{}'.format(sig,i))
+for sig in ['etsinpwr','etsintor','etsinden','etsincur']:
+    for i in range(7):
+        scalar_sig_names.append('{}{}'.format(sig,i))
 #['dstdenp','dssdenest','iptipp']
 #'bt','DUSTRIPPED','ip','N1ICWMTH','N1IIWMTH','echpwr','dsifbonoff']
 stability_sig_names=[] #['n1rms']
@@ -156,7 +144,7 @@ name_map={'standard_time': 'time',
 
 #### GATHER DATA ####
 
-pipeline = Pipeline(shots) 
+pipeline = Pipeline(shots)
 
 def standardize_time(old_signal,old_timebase,standard_times,
                      causal=True, window_size=50,
@@ -220,23 +208,23 @@ for sig_name in efit_scalar_sig_names:
 ######## FETCH PSIRZ   #############
 if include_psirz:
     psirz_sig = MdsSignal(r'\psirz',
-                          efit_type, 
+                          efit_type,
                           location='remote://atlas.gat.com',
                           dims=['r','z','times'])
     pipeline.fetch('psirz_full',psirz_sig)
     ssimag_sig = MdsSignal(r'\ssimag',
-                          efit_type, 
+                          efit_type,
                           location='remote://atlas.gat.com')
     pipeline.fetch('ssimag_full',ssimag_sig)
     ssibry_sig = MdsSignal(r'\ssibry',
-                          efit_type, 
+                          efit_type,
                           location='remote://atlas.gat.com')
     pipeline.fetch('ssibry_full',ssibry_sig)
 
 ######## FETCH RHOVN ###############
 if include_rhovn:
     rhovn_sig = MdsSignal(r'\rhovn',
-                          efit_type, 
+                          efit_type,
                           location='remote://atlas.gat.com',
                           dims=['psi','times'])
     pipeline.fetch('rhovn_full',rhovn_sig)
@@ -246,7 +234,7 @@ for sig_name in thomson_sig_names:
     for thomson_area in thomson_areas:
         thomson_sig = MdsSignal(r'TS.BLESSED.{}.{}'.format(thomson_area,sig_name),
                                 'ELECTRONS',
-                                location='remote://atlas.gat.com', 
+                                location='remote://atlas.gat.com',
                                 dims=('times','position'))
         pipeline.fetch('thomson_{}_{}_full'.format(thomson_area,sig_name),thomson_sig)
         if include_thomson_uncertainty:
@@ -349,7 +337,7 @@ def zipfit_rhovn_to_psin(record):
                                                                    record['zipfit_{}_full'.format(sig_name)]['times'],
                                                                    record['standard_time'])
 
-        rho_to_psi=[my_interp(record['rhovn'][time_ind], 
+        rho_to_psi=[my_interp(record['rhovn'][time_ind],
                               record['rhovn_full']['psi']) for time_ind in range(len(record['standard_time']))]
         record['zipfit_{}_psi'.format(sig_name)]=[]
         for time_ind in range(len(record['standard_time'])):
@@ -363,7 +351,7 @@ def zipfit_rhovn_to_psin(record):
                                                            np.ones(record['zipfit_{}_rhon_basis'.format(sig_name)].shape),
                                                            standard_x)
 #        record['zipfit_{}'.format(sig_name)]=record['zipfit_{}_full'.format(sig_name)]
-        
+
 @pipeline.map
 def map_thomson_1d(record):
     # an rz interpolator for each standard time
@@ -391,7 +379,7 @@ def map_thomson_1d(record):
                     uncertainty.append(standardize_time(record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['data'][channel],
                                               record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['times'],
                                               record['standard_time']))
-                
+
         value=np.array(value).T/thomson_scale[sig_name]
         psi=np.array(psi).T
         value[np.isclose(value,0)]=np.nan
@@ -508,7 +496,7 @@ for i in range(len(records)):
                 final_data[shot][name_map[sig]]=[]
                 rhon=record['zipfit_{}_full'.format('etempfit')]['rhon']
                 for time_ind in range(len(record['standard_time'])):
-                    rho_to_zipfit=my_interp(rhon, 
+                    rho_to_zipfit=my_interp(rhon,
                                             record[sig][time_ind])
                     final_data[shot][name_map[sig]].append(rho_to_zipfit(standard_x))
                 final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
@@ -518,7 +506,7 @@ for i in range(len(records)):
                     final_data[shot][name_map[sig]]=final_data[shot][name_map[sig]]*.5e6
         else:
             final_data[shot][sig]=np.array(record[sig])
-    # to accomodate the old code's bug of flipping top and bottom 
+    # to accomodate the old code's bug of flipping top and bottom
     if False:
         tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
         final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
@@ -530,7 +518,7 @@ for i in range(len(records)):
         final_data[shot]['dstdenp_full']=record['dstdenp_full']
         final_data[shot]['volume_full']=record['volume_full']
         final_data[shot]['n1rms_full']=record['n1rms_full']
-                
+
 
 with open(output_file,'wb') as f:
     pickle.dump(final_data, f)
@@ -577,7 +565,7 @@ if debug:
         plt.xlabel('time (unit: {})'.format(records[0]['{}_full'.format(debug_sig_name)]['units']['times']))
         plt.ylabel('{} (unit: {})'.format(debug_sig_name, records[0]['{}_full'.format(debug_sig_name)]['units']['data']))
         plt.show()
-    
+
     if debug_sig_name in efit_profile_sig_names:
         xlist=[standard_x]
         ylist=[records[0]['{}'.format(debug_sig_name)]]
@@ -590,4 +578,4 @@ if debug:
                                   xlabel='psi',
                                   uncertaintylist=uncertaintylist,
                                   labels=labels)
-        
+
