@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import interpolate
+import time
 
 def fill_value(arr2d):
     # dv is differential so will be missing the last volume element
@@ -13,6 +14,42 @@ def interp_ND_rectangular(coords,data):
     return interpolate.RegularGridInterpolator(coords,data,
                                                bounds_error=False,
                                                fill_value=None)
+
+# Context manager that we can use to time execution
+class Timer(object):
+    def __init__(self):
+        self.start = None
+
+    def __enter__(self):
+        self.start = time.time()
+
+    def __exit__(self, *args):
+        elapsed = time.time() - self.start
+        print('---------------------')
+        print('---> Ran in {0:.2f} s'.format(elapsed))
+
+def standardize_time(old_signal,old_timebase,standard_times,
+                     causal=True, window_size=50,
+                     exponential_falloff=False, falloff_rate=100):
+    new_signal=[]
+    for i in range(len(standard_times)):
+        if causal:
+            inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]))[0]
+        else:
+            inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]+window_size))[0]
+        if len(inds_in_range)==0:
+            if len(old_signal.shape)==1:
+                new_signal.append(np.nan)
+            else:
+                new_signal.append(np.full(old_signal.shape[1:],np.nan))
+        else:
+            if exponential_falloff:
+                weights=np.array([np.exp(- np.abs(standard_times[i]-old_timebase[ind]) / falloff_rate) for ind in inds_in_range])
+                weights/=sum(weights)
+                new_signal.append( np.array( np.sum( [old_signal[ind]*weights[j] for j,ind in enumerate(inds_in_range)], axis=0) ) )
+            else:
+                new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
+    return np.array(new_signal)
 
 def my_interp(x,y,kind='linear'):
     return interpolate.interp1d(x,y,

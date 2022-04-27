@@ -1,58 +1,31 @@
 #!/usr/bin/env python
 '''
-Simple script to utilize toksearch capabilities to build a Thomson ne database
-Saves data to pickle files with a single time array
-
-Author: Joe Abbate & Oak Nelson (Nov 22 2020)
-
-INPUTS:
- - shots      (list)    | a list of shots to include
- - tmin       (float)   | minimum time to include in output
- - tmax       (float)   | maximum time to include in output
- - outdir     (string)  | output directory for pkl files
-
-OUTPUTS:
- - <shot>.pkl (pkl)     | a pickle file with the ECE output
+Requires
+1) git clone https://github.com/segasai/astrolibpy
+   into the lib/ dir (this is for mtanh fits)
+2) module load toksearch
+3) pip install csaps
+   this is for smoothing spline fits
+Run as python new_database_maker.py configs/quick_test.yaml
 '''
 
-
 from toksearch import PtDataSignal, MdsSignal, Pipeline
+from toksearch.sql.mssql import connect_d3drdb
 import numpy as np
 import collections
 import pprint
-import pickle
-
 import sys
 import os
 import time
-
 from scipy import interpolate
-
 sys.path.append(os.path.join(os.path.dirname(__file__),'lib'))
-from transport_helpers import my_interp, interp_ND_rectangular
+from transport_helpers import my_interp, standardize_time, Timer
 import fit_functions
 from plot_tools import plot_comparison_over_time, plot_2d_comparison
-
 import matplotlib.pyplot as plt
-
 import yaml
 import argparse
-
-# Context manager that we can use to time execution
-class Timer(object):
-    def __init__(self):
-        self.start = None
-
-    def __enter__(self):
-        self.start = time.time()
-
-    def __exit__(self, *args):
-        elapsed = time.time() - self.start
-        print('---------------------')
-        print('---> Ran in {0:.2f} s'.format(elapsed))
-
-###### USER INPUTS ######
-#                       #
+import h5py
 
 parser = argparse.ArgumentParser(description='Read tokamak data via toksearch.')
 parser.add_argument('config_filename', type=str,
@@ -61,6 +34,10 @@ args = parser.parse_args()
 
 with open(args.config_filename,"r") as f:
     cfg=yaml.safe_load(f)
+
+from database_settings import pcs_length, name_map, zipfit_pairs, cer_scale, cer_areas, cer_channels,thomson_areas, thomson_scale
+for sig in cfg['data']['efit_scalar_sig_names']+cfg['data']['efit_profile_sig_names']:
+    name_map[sig]=name_map[sig]+f"_{cfg['data']['efit_type']}"
 
 ##########################
 
@@ -75,28 +52,7 @@ if isinstance(cfg['data']['shots'],str):
     all_shots=np.load(cfg['data']['shots'])
 else:
     all_shots=cfg['data']['shots']
-all_shots=sorted(all_shots)
-
-thomson_scale={'density': 1e19, 'temp': 1e3}
-thomson_areas=['CORE','TANGENTIAL']
-
-cer_scale={'temp': 1e3, 'rot': 1}
-cer_areas=['TANGENTIAL', 'VERTICAL']
-cer_channels={'TANGENTIAL': np.arange(1,33),
-              'VERTICAL': np.arange(1,49)}
-
-zipfit_pairs={'cer_temp': 'itempfit',
-              'cer_rot': 'trotfit',
-              'thomson_temp': 'etempfit',
-              'thomson_density': 'edensfit'}
-
-# our PCS algo stuff
-pcs_length={sig_name: np.arange(0,33) for sig_name in cfg['data']['pcs_sig_names']}
-pcs_length['ftscrot']=np.arange(1,16)
-pcs_length['ftscpsin']=np.arange(1,16)
-pcs_length['ftsc1vld']=np.arange(1,16)
-pcs_length['ftsspsin']=np.arange(1,76)
-pcs_length['ftssrot']=np.arange(1,76)
+all_shots=sorted(all_shots,reverse=True)
 
 # psi / rho
 standard_x=np.linspace(0,1,cfg['data']['num_x_points'])
@@ -112,93 +68,44 @@ fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
 fit_functions_1d=['linear_interp_1d', 'mtanh_1d','spline_1d','csaps_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
-name_map={'standard_time': 'time',
-          'zipfit_trotfit': 'rotation',
-          'zipfit_itempfit': 'itemp',
-          'zipfit_etempfit': 'temp',
-          'zipfit_edensfit': 'dens',
-          'vloop': 'vloop',
-          'aminor': 'a_{}'.format(cfg['data']['efit_type']),
-          'li': 'li_{}'.format(cfg['data']['efit_type']),
-          'kappa': 'kappa_{}'.format(cfg['data']['efit_type']),
-          'volume': 'volume_{}'.format(cfg['data']['efit_type']),
-          'betan': 'betan',
-          'betap': 'betap',
-          'drsep': 'drsep_{}'.format(cfg['data']['efit_type']),
-          'rmaxis': 'rmagx_{}'.format(cfg['data']['efit_type']),
-          'zmaxis': 'zmagX_{}'.format(cfg['data']['efit_type']),
-          'zxpt1': 'zxpt1_{}'.format(cfg['data']['efit_type']),
-          'zxpt2': 'zxpt1_{}'.format(cfg['data']['efit_type']),
-          'rxpt1': 'zxpt1_{}'.format(cfg['data']['efit_type']),
-          'rxpt2': 'zxpt1_{}'.format(cfg['data']['efit_type']),
-          'tritop': 'triangularity_top_{}'.format(cfg['data']['efit_type']),
-          'tribot': 'triangularity_bot_{}'.format(cfg['data']['efit_type']),
-          'qpsi': 'q_{}'.format(cfg['data']['efit_type']),
-          'pres': 'press_{}'.format(cfg['data']['efit_type']),
-          'pinj': 'pinj',
-          'tinj': 'tinj',
-          'dstdenp': 'target_density',
-          'dssdenest': 'density_estimate',
-          'ipsiptargt': 'curr_target',
-          'echpwr': 'ech',
-          'dsifbonoff': 'gas_feedback',
-          'DUSTRIPPED': 'dud_trip',
-          'bt': 'bt',
-          'ip': 'curr',
-          'gasA': 'gasA',
-          'gasB': 'gasB',
-          'gasC': 'gasC',
-          'gasD': 'gasD',
-          'gasE': 'gasE',
-          'pfx1': 'pfx1',
-          'pfx2': 'pfx2',
-          'N1ICWMTH': 'C_coil_method',
-          'N1IIWMTH': 'I_coil_method',
-          'n1rms': 'n1rms',
-          'n2rms': 'n2rms',
-          'n3rms': 'n3rms',
-          'wmhd': 'wmhd'}
-
-#                       #
-#### END USER INPUTS ####
-
-
-#### START OF SCRIPT ####
-#                       #
-
-#### GATHER DATA ####
-
 subshots=[]
-num_files=int(len(all_shots)/(cfg['logistics']['max_shots_per_file']+1)) + 1
+num_files=int(len(all_shots)/(cfg['logistics']['max_shots_per_run']+1)) + 1
 for i in range(num_files):
-    subshots.append(all_shots[i*cfg['logistics']['max_shots_per_file']:min((i+1)*cfg['logistics']['max_shots_per_file'],
+    subshots.append(all_shots[i*cfg['logistics']['max_shots_per_run']:min((i+1)*cfg['logistics']['max_shots_per_run'],
                                                                            len(all_shots))])
+
 for which_shot,shots in enumerate(subshots):
     print(f'Starting shot {shots[0]}-{shots[-1]}')
-    pipeline = Pipeline(shots)
+    sys.stdout.flush()
 
-    def standardize_time(old_signal,old_timebase,standard_times,
-                         causal=True, window_size=50,
-                         exponential_falloff=False, falloff_rate=100):
-        new_signal=[]
-        for i in range(len(standard_times)):
-            if causal:
-                inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]))[0]
-            else:
-                inds_in_range=np.where(np.logical_and(old_timebase>=standard_times[i]-window_size,old_timebase<standard_times[i]+window_size))[0]
-            if len(inds_in_range)==0:
-                if len(old_signal.shape)==1:
-                    new_signal.append(np.nan)
-                else:
-                    new_signal.append(np.full(old_signal.shape[1:],np.nan))
-            else:
-                if exponential_falloff:
-                    weights=np.array([np.exp(- np.abs(standard_times[i]-old_timebase[ind]) / falloff_rate) for ind in inds_in_range])
-                    weights/=sum(weights)
-                    new_signal.append( np.array( np.sum( [old_signal[ind]*weights[j] for j,ind in enumerate(inds_in_range)], axis=0) ) )
-                else:
-                    new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
-        return np.array(new_signal)
+    # deprecated if/else: we transitioned to hdf5 so no longer
+    # need to separate out the files
+    if True: #num_files==1:
+        true_filename=f"{cfg['logistics']['output_file']}"
+    else:
+        true_filename=f"{cfg['logistics']['output_file']}_{which_shot}"
+
+    # pipeline for SQL signals
+    if len(cfg['data']['sql_sig_names'])>0:
+        query="select shot,{} from summaries where shot in {}".format(
+            ','.join(cfg['data']['sql_sig_names']),
+            '({})'.format(','.join([str(elem) for elem in shots]))
+            )
+        conn = connect_d3drdb()
+        pipeline = Pipeline.from_sql(conn, query)
+        records=pipeline.compute_serial()
+        with h5py.File(true_filename,'a') as final_data:
+            for record in records:
+                shot=str(record['shot'])
+                final_data.require_group(shot)
+                for sig in cfg['data']['sql_sig_names']:
+                    # if we get None it throws an error...
+                    if record[sig]==None:
+                        final_data[shot][sig]=np.nan
+                    else:
+                        final_data[shot][sig]=record[sig]
+    # pipeline for regular signals
+    pipeline = Pipeline(shots)
 
     ######## FETCH SCALARS #############
     for sig_name in cfg['data']['scalar_sig_names']:
@@ -327,7 +234,11 @@ for which_shot,shots in enumerate(subshots):
             for position in ['L','U']:
                 radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.POWER.BOL_{position}{i:02d}_P',
                                         'SPECTROSCOPY')
-                pipeline.fetch('{}{}{}_full'.format('prad',position,i),radiation_sig)
+                pipeline.fetch(f'prad{position}{i}_full',radiation_sig)
+        for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
+            radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.PRAD.{key}',
+                                    'SPECTROSCOPY')
+            pipeline.fetch(f'prad{key}_full',radiation_sig)
     @pipeline.map
     def add_timebase(record):
         standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
@@ -335,8 +246,7 @@ for which_shot,shots in enumerate(subshots):
 
     @pipeline.map
     def change_timebase(record):
-        all_sig_names=cfg['data']['efit_profile_sig_names']+cfg['data']['efit_scalar_sig_names'] +cfg['data']['nb_sig_names']+cfg['data']['scalar_sig_names']+cfg['data']['stability_sig_names']\
-            +[f'zipfit_{sig}' for sig in cfg['data']['zipfit_sig_names']]
+        all_sig_names=name_map.keys()
         for sig_name in all_sig_names:
             try:
                 record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
@@ -358,7 +268,8 @@ for which_shot,shots in enumerate(subshots):
                         data.append(interpolator(standard_x))
                     record[sig_name]=np.array(data)
             except:
-                print('missing {}'.format(sig_name))
+                pass
+                #print('missing {}'.format(sig_name))
 
     if cfg['data']['include_psirz']:
         @pipeline.map
@@ -523,68 +434,62 @@ for which_shot,shots in enumerate(subshots):
         needed_sigs.append('standard_time')
         # use below to discard unneeded info
         pipeline.keep(needed_sigs)
+
     ####### TAKE THIS OUT FOR NEWER MODELS, UNCOMMENT ABOVE ############
     #needed_sigs+=['zipfit_{}_full'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
     #needed_sigs+=['pinj_full','dstdenp_full','iptipp_full','volume_full','tinj_full']
     #needed_sigs+=['n1rms_full']
     ###############################################
-    if cfg['logistics']['debug']:
-        needed_sigs.append('{}_psi_raw_1d'.format(cfg['logistics']['debug_sig_name']))
-        needed_sigs.append('{}_raw_1d'.format(cfg['logistics']['debug_sig_name']))
-        needed_sigs.append('{}_uncertainty_raw_1d'.format(cfg['logistics']['debug_sig_name']))
+    # if cfg['logistics']['debug']:
+    #     needed_sigs.append('{}_psi_raw_1d'.format(cfg['logistics']['debug_sig_name']))
+    #     needed_sigs.append('{}_raw_1d'.format(cfg['logistics']['debug_sig_name']))
+    #     needed_sigs.append('{}_uncertainty_raw_1d'.format(cfg['logistics']['debug_sig_name']))
 
     with Timer():
         if cfg['logistics']['num_processes']>1:
             records=pipeline.compute_spark(numparts=cfg['logistics']['num_processes'])
         else:
             records=pipeline.compute_serial()
+    with h5py.File(true_filename,'a') as final_data:
+        for record in records:
+            shot=str(record['shot'])
+            final_data.require_group(shot)
+            #final_data[shot]['topology']='SNB'
+            for sig in record.keys():
+                if sig in name_map:
+                    # for handling zipfit
+                    if 'rhon_basis' in sig:
+                        tmp=[]
+                        rhon=record['zipfit_{}_full'.format(cfg['data']['zipfit_sig_names'][0])]['rhon']
+                        for time_ind in range(len(record['standard_time'])):
+                            rho_to_zipfit=my_interp(rhon,
+                                                    record[sig][time_ind])
+                            tmp.append(rho_to_zipfit(standard_x))
+                        final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
+                    else:
+                        scale_factor=1
+                        if name_map[sig]=='curr_target':
+                            scale_factor=0.5e6
+                        final_data[shot][name_map[sig]]=np.array(record[sig])*scale_factor
+                if cfg['data']['gather_raw'] and 'full' in sig:
+                    pass #final_data[shot][sig]=record[sig]
 
-    final_data={}
-    raw_data={}
-    for i in range(len(records)):
-        record=records[i]
-        shot=int(record['shot'])
-        final_data[shot]={}
-        final_data[shot]['t_ip_flat']=np.array(cfg['data']['tmin'])
-        final_data[shot]['ip_flat_duration']=np.array(cfg['data']['tmax'])
-        #final_data[shot]['topology']='SNB'
-        for sig in record.keys():
-            if sig in name_map:
-                # for handling zipfit
-                if 'rhon_basis' in sig:
-                    final_data[shot][name_map[sig]]=[]
-                    rhon=record['zipfit_{}_full'.format(cfg['data']['zipfit_sig_names'][0])]['rhon']
-                    for time_ind in range(len(record['standard_time'])):
-                        rho_to_zipfit=my_interp(rhon,
-                                                record[sig][time_ind])
-                        final_data[shot][name_map[sig]].append(rho_to_zipfit(standard_x))
-                    final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
-                else:
-                    final_data[shot][name_map[sig]]=np.array(record[sig])
-                    if name_map[sig]=='curr_target':
-                        final_data[shot][name_map[sig]]=final_data[shot][name_map[sig]]*0.5e6
-            if cfg['data']['gather_raw'] and 'full' in sig:
-                final_data[shot][sig]=record[sig]
-        for sig in ['ech', 'gasE']:
-            final_data[shot][sig]=np.zeros(len(final_data[shot]['time']))
+    # for i in range(len(records)):
+    #     record=records[i]
         # to accomodate the old code's bug of flipping top and bottom
-        if False:
-            tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
-            final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
-            final_data[shot]['triangularity_bot_EFIT01']=tmp
-            final_data[shot]['pinj_full']=record['pinj_full']
-            final_data[shot]['tinj_full']=record['tinj_full']
-            final_data[shot]['iptipp_full']=record['iptipp_full']
-            final_data[shot]['iptipp_full']['data']*=.5e6
-            final_data[shot]['dstdenp_full']=record['dstdenp_full']
-            final_data[shot]['volume_full']=record['volume_full']
-            final_data[shot]['n1rms_full']=record['n1rms_full']
-    if num_files==1:
-        true_filename=f"{cfg['logistics']['output_file']}"
-    else:
-        true_filename=f"{cfg['logistics']['output_file']}_{which_shot}"
-    with open(true_filename,'wb') as f:
-        pickle.dump(final_data, f)
+    #     if False:
+    #         tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
+    #         final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
+    #         final_data[shot]['triangularity_bot_EFIT01']=tmp
+    #         final_data[shot]['pinj_full']=record['pinj_full']
+    #         final_data[shot]['tinj_full']=record['tinj_full']
+    #         final_data[shot]['iptipp_full']=record['iptipp_full']
+    #         final_data[shot]['iptipp_full']['data']*=.5e6
+    #         final_data[shot]['dstdenp_full']=record['dstdenp_full']
+    #         final_data[shot]['volume_full']=record['volume_full']
+    #         final_data[shot]['n1rms_full']=record['n1rms_full']
+    # with open(true_filename,'wb') as f:
+    #     pickle.dump(final_data, f)
 
 if cfg['logistics']['debug']:
     for shot in final_data:
