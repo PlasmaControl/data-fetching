@@ -14,5 +14,7 @@ minimum_shot = 120000
 pipeline = Pipeline.from_sql(conn, parameterized_query, minimum_shot)
 results = pipeline.compute_serial()
 
+shots=np.array([elem['shot'] for elem in results])
+
 np.save('data/shots.npy',
-        np.array([elem['shot'] for elem in results]))
+        shots)

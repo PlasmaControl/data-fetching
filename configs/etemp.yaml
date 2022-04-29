@@ -53,6 +53,7 @@ data:
   trial_fits: ['csaps_1d']
 logistics:
   output_file: /cscratch/abbatej/data.h5
+  overwrite_shots: True
   debug: False
   debug_sig_name: 'cer_rot'
   num_processes: 1

@@ -5,8 +5,8 @@ thomson_areas=['CORE','TANGENTIAL']
 
 cer_scale={'temp': 1e3, 'rot': 1}
 cer_areas=['TANGENTIAL', 'VERTICAL']
-cer_channels={'TANGENTIAL': np.arange(1,33),
-              'VERTICAL': np.arange(1,49)}
+cer_channels={'TANGENTIAL': np.arange(5,25), #np.arange(1,33); np.arange(5,25) for realtime
+              'VERTICAL': []} #np.arange(1,49); [] for realtime
 
 zipfit_pairs={'cer_temp': 'itempfit',
               'cer_rot': 'trotfit',

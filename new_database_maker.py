@@ -56,7 +56,7 @@ all_shots=sorted(all_shots,reverse=True)
 
 # psi / rho
 standard_x=np.linspace(0,1,cfg['data']['num_x_points'])
-
+psirz_needed=(len(cfg['data']['cer_sig_names'])>0 or len(cfg['data']['thomson_sig_names'])>0)
 fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
                    'spline_1d': fit_functions.spline_1d,
                    'nn_interp_2d': fit_functions.nn_interp_2d,
@@ -68,6 +68,21 @@ fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
 fit_functions_1d=['linear_interp_1d', 'mtanh_1d','spline_1d','csaps_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
+filename=cfg['logistics']['output_file']
+
+standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
+with h5py.File(filename,'a') as final_data:
+    if 'times' in final_data:
+        assert np.all(final_data['times']==standard_times), f"Time in existing h5 file {filename} different from the one you attempt to read (based on config file's tmin, tmax, time_step)"
+    else:
+        final_data['times']=standard_times
+
+if cfg['logistics']['overwrite_shots']:
+    with h5py.File(filename,'a') as final_data:
+        for shot in all_shots:
+            if str(shot) in final_data:
+                del final_data[str(shot)]
+
 subshots=[]
 num_files=int(len(all_shots)/(cfg['logistics']['max_shots_per_run']+1)) + 1
 for i in range(num_files):
@@ -78,13 +93,6 @@ for which_shot,shots in enumerate(subshots):
     print(f'Starting shot {shots[0]}-{shots[-1]}')
     sys.stdout.flush()
 
-    # deprecated if/else: we transitioned to hdf5 so no longer
-    # need to separate out the files
-    if True: #num_files==1:
-        true_filename=f"{cfg['logistics']['output_file']}"
-    else:
-        true_filename=f"{cfg['logistics']['output_file']}_{which_shot}"
-
     # pipeline for SQL signals
     if len(cfg['data']['sql_sig_names'])>0:
         query="select shot,{} from summaries where shot in {}".format(
@@ -94,7 +102,7 @@ for which_shot,shots in enumerate(subshots):
         conn = connect_d3drdb()
         pipeline = Pipeline.from_sql(conn, query)
         records=pipeline.compute_serial()
-        with h5py.File(true_filename,'a') as final_data:
+        with h5py.File(filename,'a') as final_data:
             for record in records:
                 shot=str(record['shot'])
                 final_data.require_group(shot)
@@ -143,7 +151,7 @@ for which_shot,shots in enumerate(subshots):
 
 
     ######## FETCH PSIRZ   #############
-    if cfg['data']['include_psirz']:
+    if cfg['data']['include_psirz'] or psirz_needed:
         psirz_sig = MdsSignal(r'\psirz',
                               cfg['data']['efit_type'],
                               location='remote://atlas.gat.com',
@@ -271,7 +279,7 @@ for which_shot,shots in enumerate(subshots):
                 pass
                 #print('missing {}'.format(sig_name))
 
-    if cfg['data']['include_psirz']:
+    if cfg['data']['include_psirz'] or psirz_needed:
         @pipeline.map
         def add_psin(record):
             psi_norm_f = record['ssibry_full']['data'] - record['ssimag_full']['data']
@@ -398,6 +406,7 @@ for which_shot,shots in enumerate(subshots):
             record['cer_{}_raw_1d'.format(sig_name)]=value
             record['cer_{}_uncertainty_raw_1d'.format(sig_name)]=uncertainty
             record['cer_{}_psi_raw_1d'.format(sig_name)]=psi
+            record['cer_{}_r_raw_1d'.format(sig_name)]=r
             for trial_fit in cfg['data']['trial_fits']:
                 if trial_fit in fit_functions_1d:
                     record['cer_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
@@ -425,13 +434,17 @@ for which_shot,shots in enumerate(subshots):
             needed_sigs+=['psirz','psirz_r','psirz_z']
         if cfg['data']['include_rhovn']:
             needed_sigs+=['rhovn']
+        for sig_name in cfg['data']['cer_sig_names']:
+            needed_sigs+=[f"cer_{sig_name}_raw_1d",
+                          f"cer_{sig_name}_uncertainty_raw_1d",
+                          f"cer_{sig_name}_psi_raw_1d",
+                          f"cer_{sig_name}_r_raw_1d"]
 
         for trial_fit in cfg['data']['trial_fits']:
             needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
             needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
         needed_sigs+=['zipfit_{}_rhon_basis'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
         needed_sigs+=['zipfit_{}'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-        needed_sigs.append('standard_time')
         # use below to discard unneeded info
         pipeline.keep(needed_sigs)
 
@@ -450,12 +463,13 @@ for which_shot,shots in enumerate(subshots):
             records=pipeline.compute_spark(numparts=cfg['logistics']['num_processes'])
         else:
             records=pipeline.compute_serial()
-    with h5py.File(true_filename,'a') as final_data:
+    with h5py.File(filename,'a') as final_data:
         for record in records:
             shot=str(record['shot'])
             final_data.require_group(shot)
-            #final_data[shot]['topology']='SNB'
             for sig in record.keys():
+                if sig=='shot' or sig=='errors':
+                    continue
                 if sig in name_map:
                     # for handling zipfit
                     if 'rhon_basis' in sig:
@@ -471,9 +485,9 @@ for which_shot,shots in enumerate(subshots):
                         if name_map[sig]=='curr_target':
                             scale_factor=0.5e6
                         final_data[shot][name_map[sig]]=np.array(record[sig])*scale_factor
-                if cfg['data']['gather_raw'] and 'full' in sig:
-                    pass #final_data[shot][sig]=record[sig]
-
+                else:
+                    final_data[shot][sig]=record[sig]
+            print(final_data[shot].keys())
     # for i in range(len(records)):
     #     record=records[i]
         # to accomodate the old code's bug of flipping top and bottom
@@ -488,7 +502,7 @@ for which_shot,shots in enumerate(subshots):
     #         final_data[shot]['dstdenp_full']=record['dstdenp_full']
     #         final_data[shot]['volume_full']=record['volume_full']
     #         final_data[shot]['n1rms_full']=record['n1rms_full']
-    # with open(true_filename,'wb') as f:
+    # with open(filename,'wb') as f:
     #     pickle.dump(final_data, f)
 
 if cfg['logistics']['debug']:
