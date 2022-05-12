@@ -5,9 +5,8 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__),'astrolibpy/mpfit/'))
 from mpfit import mpfit
-
 from OMFITlib_fit import fit_rbf
-
+from splines.pcs_fit_helpers import calculate_mhat, spline_eval
 from csaps import csaps
 
 #import sys
@@ -30,9 +29,10 @@ def linear_interp_1d(in_x, in_t, value, uncertainty, out_x):
             final_sig.append(get_value(out_x))
         except:
             final_sig.append(np.zeros(len(out_x)))
-            
+
     final_sig=np.array(final_sig)
     return final_sig
+
 
 def csaps_1d(in_x, in_t, value, uncertainty, out_x):
     final_sig=[]
@@ -51,7 +51,7 @@ def csaps_1d(in_x, in_t, value, uncertainty, out_x):
             final_sig.append(csaps(x,y,out_x,smooth=0.99995)) #get_value(out_x))
         except:
             final_sig.append(np.zeros(len(out_x)))
-            
+
     final_sig=np.array(final_sig)
     return final_sig
 
@@ -63,18 +63,34 @@ def spline_1d(in_x, in_t, value, uncertainty, out_x):
         y=value[time_ind,~excluded_inds]
         x=in_x[time_ind,~excluded_inds]
         err=uncertainty[time_ind,~excluded_inds]
-
         ordered_inds=np.argsort(x)
         x=x[ordered_inds]
         y=y[ordered_inds]
-
         try:
-            #import pdb; pdb.set_trace()
-            get_value=interpolate.UnivariateSpline(x,y) #,kind='linear')
+            get_value=interpolate.UnivariateSpline(x,y)
             final_sig.append(get_value(out_x))
         except:
             final_sig.append(np.zeros(len(out_x)))
-            
+
+    final_sig=np.array(final_sig)
+    return final_sig
+
+def pcs_spline_1d(in_x, in_t, value, uncertainty, out_x):
+    final_sig=[]
+
+    for time_ind in range(len(in_t)):
+        excluded_inds=np.isnan(value[time_ind,:])
+        y=value[time_ind,~excluded_inds]
+        x=in_x[time_ind,~excluded_inds]
+        err=uncertainty[time_ind,~excluded_inds]
+
+        (mPsi,mHat)=calculate_mhat(x,y,p=0.5,dxMin=0.01)
+        mPsi=mPsi[:-1] # still not sure why the last index is always 0, should talk to ricardo (TODO)
+        mHat=mHat[:-1]
+        splined_rot=spline_eval(mPsi,mHat,len(mHat))
+        get_rot=my_interp(np.linspace(0,1.2,121),splined_rot,kind='linear')
+        final_sig.append(get_rot(out_x))
+
     final_sig=np.array(final_sig)
     return final_sig
 

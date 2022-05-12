@@ -2,11 +2,15 @@
 '''
 Requires
 1) git clone https://github.com/segasai/astrolibpy
-   into the lib/ dir (this is for mtanh fits)
-2) module load toksearch
+   into the lib/ dir (this is for mtanh fits for temperature)
 3) pip install csaps
-   this is for smoothing spline fits
-Run as python new_database_maker.py configs/quick_test.yaml
+   this is for smoothing spline fits for rotation
+3) cd to lib/splines/, module load gcc-9.2.0, and type "make"
+   this is to make libspline.o, called by pcs_fit_helpers.py
+   which is in turn called by pcs_spline_1d (pcs spline for
+   rotation)
+4) module purge, then module load toksearch
+Run as python new_database_maker.py configs/etemp.yaml
 '''
 
 from toksearch import PtDataSignal, MdsSignal, Pipeline
@@ -35,9 +39,15 @@ args = parser.parse_args()
 with open(args.config_filename,"r") as f:
     cfg=yaml.safe_load(f)
 
-from database_settings import pcs_length, name_map, zipfit_pairs, cer_scale, cer_areas, cer_channels,thomson_areas, thomson_scale
+from database_settings import pcs_length, name_map, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, thomson_areas, thomson_scale
 for sig in cfg['data']['efit_scalar_sig_names']+cfg['data']['efit_profile_sig_names']:
-    name_map[sig]=name_map[sig]+f"_{cfg['data']['efit_type']}"
+    if sig in name_map:
+        name_map[sig]=name_map[sig]+f"_{cfg['data']['efit_type']}"
+    else:
+        name_map[sig]=sig+f"_{cfg['data']['efit_type']}"
+if cfg['data']['include_rhovn']:
+    name_map['rhovn']=f"rhovn_{cfg['data']['efit_type']}"
+
 
 ##########################
 
@@ -46,8 +56,8 @@ if cfg['logistics']['num_processes']>1:
     os.environ["NUMEXPR_NUM_THREADS"] = "1"
     os.environ["OMP_NUM_THREADS"] = "1"
 
-# first_shot_of_year=[0,140838,143703,148158,152159,156197,160938,164773,168439,174574,177976,181675,183948,200000]
-# campaign_names=['old','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021']
+# first_shot_of_year=[0,    140838,143703,148158,152159,156197,160938,164773,168439,174574,177976,181675,183948,200000]
+# campaign_names=    ['old','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021']
 if isinstance(cfg['data']['shots'],str):
     all_shots=np.load(cfg['data']['shots'])
 else:
@@ -59,13 +69,14 @@ standard_x=np.linspace(0,1,cfg['data']['num_x_points'])
 psirz_needed=(len(cfg['data']['cer_sig_names'])>0 or len(cfg['data']['thomson_sig_names'])>0)
 fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
                    'spline_1d': fit_functions.spline_1d,
+                   'pcs_spline_1d': fit_functions.pcs_spline_1d,
                    'nn_interp_2d': fit_functions.nn_interp_2d,
                    'linear_interp_2d': fit_functions.linear_interp_2d,
                    'mtanh_1d': fit_functions.mtanh_1d,
                    'csaps_1d': fit_functions.csaps_1d,
                    'rbf_interp_2d': fit_functions.rbf_interp_2d}
 
-fit_functions_1d=['linear_interp_1d', 'mtanh_1d','spline_1d','csaps_1d']
+fit_functions_1d=['linear_interp_1d', 'spline_1d', 'pcs_spline_1d', 'mtanh_1d','csaps_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
 filename=cfg['logistics']['output_file']
@@ -190,6 +201,10 @@ for which_shot,shots in enumerate(subshots):
 
     ######## FETCH CER     #############
     if len(cfg['data']['cer_sig_names'])>0:
+        if cfg['data']['cer_realtime_channels']:
+            cer_channels=cer_channels_realtime
+        else:
+            cer_channels=cer_channels_all
         for cer_area in cer_areas:
             for channel in cer_channels[cer_area]:
                 cer_R_sig = MdsSignal('CER.{}.{}.CHANNEL{:02d}.R'.format(cfg['data']['cer_type'],
@@ -390,9 +405,9 @@ for which_shot,shots in enumerate(subshots):
                         value.append(standardize_time(record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['data'],
                                                       record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
                                                       record['standard_time']))
-                        # set to true for rotation if we want to convert km/s to krad/s
+                        # set to true for rotation if we want to convert km/s to kHz/s
                         if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_kHz']):
-                            value[-1]=np.divide(value[-1],r)
+                            value[-1]=np.divide(value[-1],2*np.pi*r)
                         psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
                                     for time_ind in range(len(record['standard_time']))])
                         error.append(standardize_time(record['cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel)]['data'],
@@ -417,9 +432,15 @@ for which_shot,shots in enumerate(subshots):
             record['{}'.format(sig_name)]=[]
             for i in pcs_length[sig_name]:
                 nonzero_inds=np.nonzero(record['{}{}_full'.format(sig_name,i)]['data'])
-                record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
-                                                                      record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
-                                                                      record['standard_time']))
+                if 'fts' in sig_name:
+                    record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
+                                                                          record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
+                                                                          record['standard_time'],
+                                                                          numpy_smoothing_fxn=np.max))
+                else:
+                    record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
+                                                                          record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
+                                                                          record['standard_time']))
 
     if not cfg['data']['gather_raw']:
         needed_sigs=[]
@@ -435,10 +456,20 @@ for which_shot,shots in enumerate(subshots):
         if cfg['data']['include_rhovn']:
             needed_sigs+=['rhovn']
         for sig_name in cfg['data']['cer_sig_names']:
-            needed_sigs+=[f"cer_{sig_name}_raw_1d",
-                          f"cer_{sig_name}_uncertainty_raw_1d",
-                          f"cer_{sig_name}_psi_raw_1d",
-                          f"cer_{sig_name}_r_raw_1d"]
+            needed_sigs+=[f'cer_{sig_name}_raw_1d',
+                          #f'cer_{sig_name}_uncertainty_raw_1d', no real uncertainty for CER
+                          f'cer_{sig_name}_psi_raw_1d',
+                          f'cer_{sig_name}_r_raw_1d']
+        for sig_name in cfg['data']['thomson_sig_names']:
+            needed_sigs+=[f'thomson_{sig_name}_raw_1d',
+                          f'thomson_{sig_name}_uncertainty_raw_1d',
+                          f'thomson_{sig_name}_psi_raw_1d']
+        if cfg['data']['include_radiation']:
+            for i in range(1,25):
+                for position in ['L','U']:
+                    needed_sigs+=[f'prad{position}{i}']
+            for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
+                needed_sigs+=[f'prad{key}']
 
         for trial_fit in cfg['data']['trial_fits']:
             needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]

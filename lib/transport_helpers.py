@@ -30,7 +30,7 @@ class Timer(object):
 
 def standardize_time(old_signal,old_timebase,standard_times,
                      causal=True, window_size=50,
-                     exponential_falloff=False, falloff_rate=100):
+                     exponential_falloff=False, numpy_smoothing_fxn=np.mean, falloff_rate=100):
     new_signal=[]
     for i in range(len(standard_times)):
         if causal:
@@ -48,7 +48,7 @@ def standardize_time(old_signal,old_timebase,standard_times,
                 weights/=sum(weights)
                 new_signal.append( np.array( np.sum( [old_signal[ind]*weights[j] for j,ind in enumerate(inds_in_range)], axis=0) ) )
             else:
-                new_signal.append(np.mean(old_signal[inds_in_range],axis=0))
+                new_signal.append(numpy_smoothing_fxn(old_signal[inds_in_range],axis=0))
     return np.array(new_signal)
 
 def my_interp(x,y,kind='linear'):

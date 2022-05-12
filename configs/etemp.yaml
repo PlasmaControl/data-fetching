@@ -32,11 +32,12 @@ data:
   include_psirz: False
   include_rhovn: True
 #['density', 'temp']
-  thomson_sig_names: []
+  thomson_sig_names: ['temp','density']
   include_thomson_uncertainty: True
 #['temp','rot']
-  cer_sig_names: []
-  cer_type: []
+  cer_sig_names: ['rot', 'temp']
+  cer_type: 'CERQUICK'
+  cer_realtime_channels: True
   cer_rotation_units_of_kHz: True
 #['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
   zipfit_sig_names: ['trotfit','edensfit','etempfit','itempfit']
