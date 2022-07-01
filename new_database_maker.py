@@ -79,7 +79,7 @@ fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
 fit_functions_1d=['linear_interp_1d', 'spline_1d', 'pcs_spline_1d', 'mtanh_1d','csaps_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
-filename=cfg['logistics']['output_file']
+filename=os.path.expandvars(cfg['logistics']['output_file'])
 
 standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
 with h5py.File(filename,'a') as final_data:
@@ -87,6 +87,10 @@ with h5py.File(filename,'a') as final_data:
         assert np.all(final_data['times']==standard_times), f"Time in existing h5 file {filename} different from the one you attempt to read (based on config file's tmin, tmax, time_step)"
     else:
         final_data['times']=standard_times
+    if 'spatial_coordinates' in final_data:
+        assert np.all(final_data['spatial_coordinates']==standard_x), f"Time in existing h5 file {filename} different from the one you attempt to read (based on config file's tmin, tmax, time_step)"
+    else:
+        final_data['spatial_coordinates']=standard_x
 
 if cfg['logistics']['overwrite_shots']:
     with h5py.File(filename,'a') as final_data:
@@ -178,7 +182,7 @@ for which_shot,shots in enumerate(subshots):
         pipeline.fetch('ssibry_full',ssibry_sig)
 
     ######## FETCH RHOVN ###############
-    if cfg['data']['include_rhovn']:
+    if cfg['data']['include_rhovn'] or len(cfg['data']['zipfit_sig_names'])>0:
         rhovn_sig = MdsSignal(r'\rhovn',
                               cfg['data']['efit_type'],
                               location='remote://atlas.gat.com',
@@ -310,28 +314,38 @@ for which_shot,shots in enumerate(subshots):
             record['psirz_r']=record['psirz_full']['r']
             record['psirz_z']=record['psirz_full']['z']
 
-    if cfg['data']['include_rhovn']:
+    @pipeline.map
+    def zipfit_rho(record):
+        for sig_name in cfg['data']['zipfit_sig_names']:
+            record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
+                                                                       record['zipfit_{}_full'.format(sig_name)]['times'],
+                                                                       record['standard_time'])
+            tmp=[]
+            rhon=record['zipfit_{}_full'.format(sig_name)]['rhon']
+            for time_ind in range(len(record['standard_time'])):
+                rho_to_zipfit=my_interp(rhon,
+                                        record['zipfit_{}_rhon_basis'.format(sig_name)][time_ind])
+                tmp.append(rho_to_zipfit(standard_x))
+            record['zipfit_{}_rho'.format(sig_name)]=np.array(tmp)
+
+    if cfg['data']['include_rhovn'] or len(cfg['data']['zipfit_sig_names'])>0:
         @pipeline.map
         def add_rhovn(record):
             record['rhovn']=standardize_time(record['rhovn_full']['data'],
                                              record['rhovn_full']['times'],
                                              record['standard_time'])
-#        @pipeline.map
-        def zipfit_rhovn_to_psin(record):
+        @pipeline.map
+        def zipfit_psi(record):
             for sig_name in cfg['data']['zipfit_sig_names']:
-                record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
-                                                                           record['zipfit_{}_full'.format(sig_name)]['times'],
-                                                                           record['standard_time'])
-
                 rho_to_psi=[my_interp(record['rhovn'][time_ind],
                                       record['rhovn_full']['psi']) for time_ind in range(len(record['standard_time']))]
-                record['zipfit_{}_psi'.format(sig_name)]=[]
+                record['zipfit_{}_psi_full'.format(sig_name)]=[]
                 for time_ind in range(len(record['standard_time'])):
-                    record['zipfit_{}_psi'.format(sig_name)].append(rho_to_psi[time_ind](record['zipfit_{}_full'.format(sig_name)]['rhon']))
-                record['zipfit_{}_psi'.format(sig_name)]=np.array(record['zipfit_{}_psi'.format(sig_name)])
+                    record['zipfit_{}_psi_full'.format(sig_name)].append(rho_to_psi[time_ind](record['zipfit_{}_full'.format(sig_name)]['rhon']))
+                record['zipfit_{}_psi_full'.format(sig_name)]=np.array(record['zipfit_{}_psi_full'.format(sig_name)])
 
                 zipfit_interp=fit_function_dict['linear_interp_1d']
-                record['zipfit_{}'.format(sig_name)]=zipfit_interp(record['zipfit_{}_psi'.format(sig_name)],
+                record['zipfit_{}_psi'.format(sig_name)]=zipfit_interp(record['zipfit_{}_psi_full'.format(sig_name)],
                                                                    record['standard_time'],
                                                                    record['zipfit_{}_rhon_basis'.format(sig_name)],
                                                                    np.ones(record['zipfit_{}_rhon_basis'.format(sig_name)].shape),
@@ -405,9 +419,9 @@ for which_shot,shots in enumerate(subshots):
                         value.append(standardize_time(record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['data'],
                                                       record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
                                                       record['standard_time']))
-                        # set to true for rotation if we want to convert km/s to kHz/s
-                        if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_kHz']):
-                            value[-1]=np.divide(value[-1],2*np.pi*r)
+                        # set to true for rotation if we want to convert km/s to krad/s
+                        if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_krad']):
+                            value[-1]=np.divide(value[-1],r)
                         psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
                                     for time_ind in range(len(record['standard_time']))])
                         error.append(standardize_time(record['cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel)]['data'],
@@ -442,7 +456,7 @@ for which_shot,shots in enumerate(subshots):
                                                                           record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
                                                                           record['standard_time']))
 
-    if not cfg['data']['gather_raw']:
+    if True: #not cfg['data']['gather_raw']: <-- deprecated (annoying to gather random datatypes into h5)
         needed_sigs=[]
         needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
         needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
@@ -474,8 +488,8 @@ for which_shot,shots in enumerate(subshots):
         for trial_fit in cfg['data']['trial_fits']:
             needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
             needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
-        needed_sigs+=['zipfit_{}_rhon_basis'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-        needed_sigs+=['zipfit_{}'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+        needed_sigs+=['zipfit_{}_rho'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+        needed_sigs+=['zipfit_{}_psi'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
         # use below to discard unneeded info
         pipeline.keep(needed_sigs)
 
@@ -502,93 +516,10 @@ for which_shot,shots in enumerate(subshots):
                 if sig=='shot' or sig=='errors':
                     continue
                 if sig in name_map:
-                    # for handling zipfit
-                    if 'rhon_basis' in sig:
-                        tmp=[]
-                        rhon=record['zipfit_{}_full'.format(cfg['data']['zipfit_sig_names'][0])]['rhon']
-                        for time_ind in range(len(record['standard_time'])):
-                            rho_to_zipfit=my_interp(rhon,
-                                                    record[sig][time_ind])
-                            tmp.append(rho_to_zipfit(standard_x))
-                        final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
-                    else:
-                        scale_factor=1
-                        if name_map[sig]=='curr_target':
-                            scale_factor=0.5e6
-                        final_data[shot][name_map[sig]]=np.array(record[sig])*scale_factor
+                    scale_factor=1
+                    if name_map[sig]=='curr_target':
+                        scale_factor=0.5e6
+                    final_data[shot][name_map[sig]]=np.array(record[sig])*scale_factor
                 else:
                     final_data[shot][sig]=record[sig]
             print(final_data[shot].keys())
-    # for i in range(len(records)):
-    #     record=records[i]
-        # to accomodate the old code's bug of flipping top and bottom
-    #     if False:
-    #         tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
-    #         final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
-    #         final_data[shot]['triangularity_bot_EFIT01']=tmp
-    #         final_data[shot]['pinj_full']=record['pinj_full']
-    #         final_data[shot]['tinj_full']=record['tinj_full']
-    #         final_data[shot]['iptipp_full']=record['iptipp_full']
-    #         final_data[shot]['iptipp_full']['data']*=.5e6
-    #         final_data[shot]['dstdenp_full']=record['dstdenp_full']
-    #         final_data[shot]['volume_full']=record['volume_full']
-    #         final_data[shot]['n1rms_full']=record['n1rms_full']
-    # with open(filename,'wb') as f:
-    #     pickle.dump(final_data, f)
-
-if cfg['logistics']['debug']:
-    for shot in final_data:
-        print(shot)
-        print(final_data[shot].keys())
-#    print(records[0]['cer_VERTICAL_temp_20_full'])
-    #print('errors: ')
-    #print(records[0]['errors'])
-    if 'thomson' in cfg['logistics']['debug_sig_name'] or 'cer' in cfg['logistics']['debug_sig_name']:
-        xlist=[records[0]['{}_psi_raw_1d'.format(cfg['logistics']['debug_sig_name'])]]
-        ylist=[records[0]['{}_raw_1d'.format(cfg['logistics']['debug_sig_name'])]]
-        uncertaintylist=[records[0]['{}_uncertainty_raw_1d'.format(cfg['logistics']['debug_sig_name'])]]
-        labels=['raw']
-        for trial_fit in cfg['data']['trial_fits']:
-            xlist.append(standard_x)
-            ylist.append(records[0]['{}_{}'.format(cfg['logistics']['debug_sig_name'],trial_fit)])
-            uncertaintylist.append(None)
-            labels.append(trial_fit)
-        xlist.append(standard_x)
-        ylist.append(records[0]['zipfit_{}'.format(zipfit_pairs[cfg['logistics']['debug_sig_name']])])
-        uncertaintylist.append(None)
-        labels.append('zipfit_{}'.format(zipfit_pairs[cfg['logistics']['debug_sig_name']]))
-        plot_comparison_over_time(xlist=xlist,
-                                  ylist=ylist,
-                                  time=records[0]['standard_time'],
-                                  ylabel=cfg['logistics']['debug_sig_name'],
-                                  xlabel='psi',
-                                  uncertaintylist=uncertaintylist,
-                                  labels=labels)
-
-    if cfg['logistics']['debug_sig_name'] in cfg['data']['scalar_sig_names']+cfg['data']['efit_scalar_sig_names'] +cfg['data']['nb_sig_names']:
-        plt.scatter(records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['times'][::100],
-                    records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['data'][::100],
-                    c='b',
-                    label='original')
-        plt.plot(records[0]['standard_time'],
-                 records[0][cfg['logistics']['debug_sig_name']],
-                 c='r',
-                 label='interpolated')
-        plt.legend()
-        plt.xlabel('time (unit: {})'.format(records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['units']['times']))
-        plt.ylabel('{} (unit: {})'.format(cfg['logistics']['debug_sig_name'], records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['units']['data']))
-        plt.show()
-
-    if cfg['logistics']['debug_sig_name'] in cfg['data']['efit_profile_sig_names']:
-        xlist=[standard_x]
-        ylist=[records[0]['{}'.format(cfg['logistics']['debug_sig_name'])]]
-        uncertaintylist=[None]
-        labels=[cfg['logistics']['debug_sig_name']]
-        plot_comparison_over_time(xlist=xlist,
-                                  ylist=ylist,
-                                  time=records[0]['standard_time'],
-                                  ylabel=cfg['logistics']['debug_sig_name'],
-                                  xlabel='psi',
-                                  uncertaintylist=uncertaintylist,
-                                  labels=labels)
-

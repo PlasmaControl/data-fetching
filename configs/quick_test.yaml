@@ -5,7 +5,7 @@ data:
   tmin: 0
   tmax: 6000
   time_step: 50
-  gather_raw: True
+  sql_sig_names: ['t_ip_flat','ip_flat_duration','topology']
   #f'esl019'] #f'bmspinj{i}{j}' for i in ['30','15','21','33'] for j in ['l','r']] #['dstdenp','dssdenest','iptipp',
   #'bt','DUSTRIPPED','ip','N1ICWMTH','N1IIWMTH','echpwr','dsifbonoff']
   scalar_sig_names: [esl019, esl079, esl139, esl199, esl259, esl319, vloop]
@@ -23,9 +23,11 @@ data:
   include_thomson_uncertainty: True
 #['temp','rot']
   cer_sig_names: []
-  cer_type: []
+  cer_type: 'CERQUICK'
+  cer_realtime_channels: True
+  cer_rotation_units_of_khz: True
 #['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
-  zipfit_sig_names: []
+  zipfit_sig_names: ['etempfit']
 #['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
 # ['etste', 'etsne','etscr','etsct',
 #                'etstein', 'etsnein','etscrin', 'etsctin','etsinq', 'etsinprs',
@@ -34,12 +36,11 @@ data:
   pcs_sig_names: []
   include_radiation: True
 #65
-  num_x_points: 33 
+  num_x_points: 33
 #['linear_interp_1d','mtanh_1d', 'csaps_1d'] #'linear_interp_1d','spline_1d'] #,'mtanh_1d']
   trial_fits: []
 logistics:
-  output_file: '/mnt/beegfs/users/abbatej/quick_test.pkl'
-  debug: False
-  debug_sig_name: 'cer_rot'
+  output_file: quick_test.h5
+  overwrite_shots: True
   num_processes: 1
-  max_shots_per_file: 2
+  max_shots_per_run: 2
