@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 '''
-Requires
+Requires module purge, then module load toksearch
+Run as python new_database_maker.py configs/quick_test.yaml
+
+A few other dependencies for specific fits (ignore
+if you're not fitting cer and thomson yourself):
 1) git clone https://github.com/segasai/astrolibpy
    into the lib/ dir (this is for mtanh fits for temperature)
 3) pip install csaps
@@ -9,8 +13,6 @@ Requires
    this is to make libspline.o, called by pcs_fit_helpers.py
    which is in turn called by pcs_spline_1d (pcs spline for
    rotation)
-4) module purge, then module load toksearch
-Run as python new_database_maker.py configs/etemp.yaml
 '''
 
 from toksearch import PtDataSignal, MdsSignal, Pipeline

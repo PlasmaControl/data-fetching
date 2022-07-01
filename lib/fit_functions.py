@@ -3,15 +3,8 @@ from scipy import interpolate
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__),'astrolibpy/mpfit/'))
-from mpfit import mpfit
 from OMFITlib_fit import fit_rbf
 from splines.pcs_fit_helpers import calculate_mhat, spline_eval
-from csaps import csaps
-
-#import sys
-#import os
-#sys.path.append(os.path.join(os.path.dirname(__file__),'..','lib'))
 
 from transport_helpers import my_interp
 
@@ -35,6 +28,7 @@ def linear_interp_1d(in_x, in_t, value, uncertainty, out_x):
 
 
 def csaps_1d(in_x, in_t, value, uncertainty, out_x):
+    from csaps import csaps
     final_sig=[]
 
     for time_ind in range(len(in_t)):
@@ -188,6 +182,9 @@ def rbf_interp_2d(in_x, in_t, value, uncertainty, out_x, out_t, debug=False):
     return final_sig
 
 def mtanh_1d(in_x, in_t, value, uncertainty, out_x):
+    sys.path.append(os.path.join(os.path.dirname(__file__),'astrolibpy/mpfit/'))
+    from mpfit import mpfit
+
     p0=np.array([1.0, 3.0, 0.01, 1.0, 0.01],dtype='float64')  #initial conditions
 
     parinfo=[]
