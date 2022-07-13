@@ -50,6 +50,41 @@ for sig in cfg['data']['efit_scalar_sig_names']+cfg['data']['efit_profile_sig_na
 if cfg['data']['include_rhovn']:
     name_map['rhovn']=f"rhovn_{cfg['data']['efit_type']}"
 
+needed_sigs=[]
+needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['efit_profile_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['efit_scalar_sig_names'] ]
+needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
+if cfg['data']['include_psirz']:
+    needed_sigs+=['psirz','psirz_r','psirz_z']
+if cfg['data']['include_rhovn']:
+    needed_sigs+=['rhovn']
+for sig_name in cfg['data']['cer_sig_names']:
+    needed_sigs+=[f'cer_{sig_name}_raw_1d',
+                  #f'cer_{sig_name}_uncertainty_raw_1d', no real uncertainty for CER
+                  f'cer_{sig_name}_psi_raw_1d',
+                  f'cer_{sig_name}_r_raw_1d']
+for sig_name in cfg['data']['thomson_sig_names']:
+    needed_sigs+=[f'thomson_{sig_name}_raw_1d',
+                  f'thomson_{sig_name}_uncertainty_raw_1d',
+                  f'thomson_{sig_name}_psi_raw_1d']
+if cfg['data']['include_radiation']:
+    for i in range(1,25):
+        for position in ['L','U']:
+            needed_sigs+=[f'prad{position}{i}']
+    for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
+        needed_sigs+=[f'prad{key}']
+for trial_fit in cfg['data']['trial_fits']:
+    needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
+    needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
+needed_sigs+=['zipfit_{}_rho'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+needed_sigs+=['zipfit_{}_psi'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+
+for sig in needed_sigs:
+    if sig not in name_map:
+        name_map[sig]=sig
 
 ##########################
 
@@ -298,7 +333,6 @@ for which_shot,shots in enumerate(subshots):
                     record[sig_name]=np.array(data)
             except:
                 pass
-                #print('missing {}'.format(sig_name))
 
     if cfg['data']['include_psirz'] or psirz_needed:
         @pipeline.map
@@ -459,39 +493,6 @@ for which_shot,shots in enumerate(subshots):
                                                                           record['standard_time']))
 
     if True: #not cfg['data']['gather_raw']: <-- deprecated (annoying to gather random datatypes into h5)
-        needed_sigs=[]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['efit_profile_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['efit_scalar_sig_names'] ]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
-
-        if cfg['data']['include_psirz']:
-            needed_sigs+=['psirz','psirz_r','psirz_z']
-        if cfg['data']['include_rhovn']:
-            needed_sigs+=['rhovn']
-        for sig_name in cfg['data']['cer_sig_names']:
-            needed_sigs+=[f'cer_{sig_name}_raw_1d',
-                          #f'cer_{sig_name}_uncertainty_raw_1d', no real uncertainty for CER
-                          f'cer_{sig_name}_psi_raw_1d',
-                          f'cer_{sig_name}_r_raw_1d']
-        for sig_name in cfg['data']['thomson_sig_names']:
-            needed_sigs+=[f'thomson_{sig_name}_raw_1d',
-                          f'thomson_{sig_name}_uncertainty_raw_1d',
-                          f'thomson_{sig_name}_psi_raw_1d']
-        if cfg['data']['include_radiation']:
-            for i in range(1,25):
-                for position in ['L','U']:
-                    needed_sigs+=[f'prad{position}{i}']
-            for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
-                needed_sigs+=[f'prad{key}']
-
-        for trial_fit in cfg['data']['trial_fits']:
-            needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
-            needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
-        needed_sigs+=['zipfit_{}_rho'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-        needed_sigs+=['zipfit_{}_psi'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
         # use below to discard unneeded info
         pipeline.keep(needed_sigs)
 
