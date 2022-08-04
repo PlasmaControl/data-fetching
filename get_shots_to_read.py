@@ -33,7 +33,7 @@ def main(np_dest, txt_dest):
 
     np.save(np_dest, shots)
     with txt_dest.open('w') as f:
-        f.writelines([shot + '\n' for shot in shot_list])
+        f.writelines([str(shot) + '\n' for shot in shot_list])
     print(f"wrote {len(shot_list)} new shots to {np_dest} and {txt_dest}")
 
 if __name__ == '__main__':
