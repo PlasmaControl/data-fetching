@@ -2,8 +2,7 @@
 # the actuator proposal timetrace, and the predicted profiles
 
 # for offline data:
-# run "python new_database_maker.py configs/etemp.yaml" to create "data.pkl"
-# (in the headnode above this directory, in the tokamak-transport repo)
+# just module load toksearch, it self-caches
 # for pcs data:
 # run "python dump_pcs_data.py" first to create "pcs_data.pkl"
 

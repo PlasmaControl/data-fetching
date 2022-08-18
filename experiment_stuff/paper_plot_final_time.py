@@ -366,6 +366,7 @@ fig.legend(handles, labels, loc='lower right',bbox_to_anchor=(1,0.475))
 for i in range(len(axes)):
     axes[i].axvspan(1.350,1.730,color=matplotlib_parameters.matlab_colors[-1],alpha=0.3)
 axes[1].text((1.350+1.730)/2,85,'rtEFIT\nError',ha='center',va='center')
+axes[1].annotate('Estimate\nrecovers',xy=(1.73,60), xycoords='data', xytext=(1.87,100),arrowprops=dict(facecolor='black', shrink=0.05),horizontalalignment='right',verticalalignment='top',ha='center')
 axes[1].axvspan(2.,3.,color='k',alpha=0.2)
 t=axes[1].text(2.5,35,'Pressure\nControl Off',ha='center',va='center')
 
@@ -414,4 +415,4 @@ for ax in axes:
     ax.tick_params('both',length=8,which='major')
 plt.savefig('paper_plot_final_time.png')
 plt.savefig('paper_plot_final_time.pdf')
-#plt.show()
+plt.show()
