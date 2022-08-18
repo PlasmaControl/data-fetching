@@ -4,7 +4,7 @@ import numpy as np
 # from https://diii-d.gat.com/DIII-D/software/ml/toksearch/latest/SQL.html
 
 # for getting all plasma shots past a certain shot number
-if False:
+if True:
     minimum_shot = 120000
     query = """
         select shot
@@ -33,6 +33,6 @@ results = pipeline.compute_serial()
 
 shots=np.array([elem['shot'] for elem in results])
 
-print(f"Shots within range: {min(shots)} to {max(shots)}")
+print(f"{len(shots)} shots, within {min(shots)}-{max(shots)}")
 np.save('data/shots.npy',
         shots)
