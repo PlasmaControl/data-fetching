@@ -32,6 +32,7 @@ import matplotlib.pyplot as plt
 import yaml
 import argparse
 import h5py
+import datetime # for dealing with getting the datetime from the summaries table
 
 parser = argparse.ArgumentParser(description='Read tokamak data via toksearch.')
 parser.add_argument('config_filename', type=str,
@@ -76,15 +77,16 @@ if cfg['data']['include_radiation']:
             needed_sigs+=[f'prad{position}{i}']
     for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
         needed_sigs+=[f'prad{key}']
+if cfg['data']['include_full_ech_data']:
+    needed_sigs+=['ech_names','ech_frequency','ech_R','ech_Z',
+                  'ech_pwr','ech_aziang','ech_polang']
+if cfg['data']['include_full_nb_data']:
+    needed_sigs+=['nb_pinj','nb_tinj','nb_vinj','nb_vinj_scalar','nb_210_rtan','nb_150_tilt']
 for trial_fit in cfg['data']['trial_fits']:
     needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
     needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
 needed_sigs+=['zipfit_{}_rho'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
 needed_sigs+=['zipfit_{}_psi'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-
-for sig in needed_sigs:
-    if sig not in name_map:
-        name_map[sig]=sig
 
 ##########################
 
@@ -147,11 +149,16 @@ for which_shot,shots in enumerate(subshots):
 
     # pipeline for SQL signals
     if len(cfg['data']['sql_sig_names'])>0:
-        query="select shot,{} from summaries where shot in {}".format(
+        conn = connect_d3drdb()
+        # you can continue adding joins to make sure all signals get collected
+        query="""SELECT summaries.shot,{}
+                 FROM summaries
+                 INNER JOIN shots ON summaries.shot=shots.shot
+                 WHERE summaries.shot in {}
+              """.format(
             ','.join(cfg['data']['sql_sig_names']),
             '({})'.format(','.join([str(elem) for elem in shots]))
             )
-        conn = connect_d3drdb()
         pipeline = Pipeline.from_sql(conn, query)
         records=pipeline.compute_serial()
         with h5py.File(filename,'a') as final_data:
@@ -159,11 +166,42 @@ for which_shot,shots in enumerate(subshots):
                 shot=str(record['shot'])
                 final_data.require_group(shot)
                 for sig in cfg['data']['sql_sig_names']:
+                    sig_name=sig+'_sql'
                     # if we get None it throws an error...
                     if record[sig]==None:
-                        final_data[shot][sig]=np.nan
+                        final_data[shot][sig_name]=np.nan
+                    # primarily for dealing with time_of_shot in summaries table
+                    elif isinstance(record[sig],datetime.datetime):
+                        final_data[shot][sig_name]=str(record[sig])
                     else:
-                        final_data[shot][sig]=record[sig]
+                        final_data[shot][sig_name]=record[sig]
+
+    # pipeline for GAS
+    if cfg['data']['include_gas_valve_info']:
+        gas_sigs=['gas','valve']
+        conn = connect_d3drdb()
+        # you can continue adding joins to make sure all signals get collected
+        query="""SELECT shot,{}
+                 FROM gasvalves
+                 WHERE shot in {}
+              """.format(
+            ','.join(gas_sigs),
+            '({})'.format(','.join([str(elem) for elem in shots]))
+            )
+        pipeline = Pipeline.from_sql(conn, query)
+        records=pipeline.compute_serial()
+        tmp_dic={str(shot): {sig: [] for sig in gas_sigs} for shot in shots}
+        for record in records:
+            for sig in gas_sigs:
+                shot=str(record['shot'])
+                tmp_dic[shot][sig].append(record[sig])
+        with h5py.File(filename,'a') as final_data:
+            for shot in tmp_dic:
+                final_data.require_group(shot)
+                for sig in gas_sigs:
+                    sig_name=sig+'_sql'
+                    final_data[shot][sig_name]=tmp_dic[shot][sig]
+
     # pipeline for regular signals
     pipeline = Pipeline(shots)
 
@@ -303,14 +341,112 @@ for which_shot,shots in enumerate(subshots):
             radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.PRAD.{key}',
                                     'SPECTROSCOPY')
             pipeline.fetch(f'prad{key}_full',radiation_sig)
+
+    ######## ECH DETAILED INFO #########
+    if cfg['data']['include_full_ech_data']:
+        num_systems=MdsSignal('ECH.NUM_SYSTEMS','RF',dims=())
+        pipeline.fetch('ech_num_systems',num_systems)
+        for i in range(1,7):
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.NAME','RF',dims=())
+            pipeline.fetch(f'ech_name_{i}',signal)
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.FREQUENCY','RF',dims=())
+            pipeline.fetch(f'ech_frequency_{i}',signal)
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_R','RF',dims=())
+            pipeline.fetch(f'ech_R_{i}',signal)
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_Z','RF',dims=())
+            pipeline.fetch(f'ech_Z_{i}',signal)
+
+        #https://diii-d.gat.com/diii-d/ECHStatus
+        for gyro in ['LEIA', 'LUKE', 'R2D2', #active
+                     'YODA', #starting up
+                     'SCARECROW', 'TINMAN', 'CHEWBACCA', #retired
+                     'TOTO', 'NATASHA', 'KATYA', #not on website but in tree
+                     'LION', 'HAN', 'NASA', 'VADER']: #not operational
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}AZIANG','RF')
+            pipeline.fetch(f'ech_aziang_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}POLANG','RF')
+            pipeline.fetch(f'ech_polang_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}FPWRC','RF')
+            pipeline.fetch(f'ech_pwr_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}XMFRAC','RF')
+            pipeline.fetch(f'ech_xmfrac_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}STAT','RF',dims=())
+            pipeline.fetch(f'ech_stat_{gyro}',signal)
+
+    ######## NB DETAILED INFO #########
+    if cfg['data']['include_full_nb_data']:
+        for beam in [30,150,210,330]:
+            beam_name=str(beam)[:2]
+            for location in ['L','R']:
+                # PINJ_ is not there for older shots, which is incredibly annoying
+                # DIIID-BEAMS script (see OMFIT-source/modules/DIIID-BEAMS/SCRIPTS/LIB/OMFITlib_utilities)
+                # handles this by taking the scalar value and multiplying by BEAMSTAT
+                signal=MdsSignal(f'NB{beam_name}{location}.PINJ_{beam_name}{location}','NB')
+                pipeline.fetch(f'nb_{beam}{location}_pinj',signal)
+                signal=MdsSignal(f'NB{beam_name}{location}.TINJ_{beam_name}{location}','NB')
+                pipeline.fetch(f'nb_{beam}{location}_tinj',signal)
+                signal=MdsSignal(f'NB{beam_name}{location}.VBEAM','NB')
+                pipeline.fetch(f'nb_{beam}{location}_vinj',signal)
+                signal=MdsSignal(f'NB{beam_name}{location}.NBVAC_SCALAR','NB',dims=())
+                pipeline.fetch(f'nb_{beam}{location}_vinj_scalar',signal)
+        signal=MdsSignal(f'NB15L.OANB.BLPTCH_CAD','NB',dims=())
+        pipeline.fetch(f'nb_150_tilt',signal)
+        signal=MdsSignal(f'NB21L.CCOANB.BLROT','NB',dims=())
+        pipeline.fetch(f'nb_210_rtan',signal)
+
     @pipeline.map
     def add_timebase(record):
         standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
         record['standard_time']=standard_times
 
+    if cfg['data']['include_full_ech_data']:
+        @pipeline.map
+        def add_ech_info(record):
+            num_systems=record['ech_num_systems']['data']
+            record['ech_names']=[]
+            sigs_0d=['frequency','R','Z']
+            sigs_1d=['pwr','aziang','polang']
+            for key in sigs_0d+sigs_1d:
+                record[f'ech_{key}']=[]
+            for i in range(1,num_systems+1):
+                gyro=record[f'ech_name_{i}']['data'].upper()
+                record['ech_names'].append(gyro)
+                for key in sigs_0d:
+                    record[f'ech_{key}'].append(record[f'ech_{key}_{i}']['data'])
+                for key in sigs_1d:
+                    record[f'ech_{key}'].append(standardize_time(record[f'ech_{key}_{gyro}']['data'],
+                                                                record[f'ech_{key}_{gyro}']['times'],
+                                                                record['standard_time']))
+
+    if cfg['data']['include_full_nb_data']:
+        @pipeline.map
+        def add_nb_info(record):
+            sigs_1d=['pinj','tinj','vinj'] #make sure vinj is last since it fails on shots without time-dependent v
+            for sig in sigs_1d:
+                record[f'nb_{sig}']=[]
+            record['nb_vinj_scalar']=[]
+            for sig in ['nb_210_rtan','nb_150_tilt']:
+                try:
+                    assert(record[sig]['data'] is not None)
+                    record[sig]=record[sig]['data']
+                except:
+                    record[sig]=np.nan
+            for sig in sigs_1d:
+                for beam in [30,150,210,330]:
+                    for location in ['L','R']:
+                        try:
+                            record[f'nb_{sig}'].append(standardize_time(record[f'nb_{beam}{location}_{sig}']['data'],
+                                                                        record[f'nb_{beam}{location}_{sig}']['times'],
+                                                                        record['standard_time']))
+                        except:
+                            pass
+            for beam in [30,150,210,330]:
+                for location in ['L','R']:
+                    record['nb_vinj_scalar'].append(record[f'nb_{beam}{location}_vinj_scalar']['data'])
+
     @pipeline.map
     def change_timebase(record):
-        all_sig_names=name_map.keys()
+        all_sig_names=needed_sigs
         for sig_name in all_sig_names:
             try:
                 record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
@@ -519,10 +655,9 @@ for which_shot,shots in enumerate(subshots):
                 if sig=='shot' or sig=='errors':
                     continue
                 if sig in name_map:
-                    scale_factor=1
-                    if name_map[sig]=='curr_target':
-                        scale_factor=0.5e6
-                    final_data[shot][name_map[sig]]=np.array(record[sig])*scale_factor
+                    final_data[shot][name_map[sig]]=record[sig]
                 else:
                     final_data[shot][sig]=record[sig]
-            print(final_data[shot].keys())
+            # for key in record['errors']:
+            #     print(key)
+            #     print(record['errors'][key]['traceback'].replace('\\n','\n'))
