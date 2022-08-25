@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 '''
-Requires
+Requires module purge, then module load toksearch
+Run as python new_database_maker.py configs/quick_test.yaml
+
+A few other dependencies for specific fits (ignore
+if you're not fitting cer and thomson yourself):
 1) git clone https://github.com/segasai/astrolibpy
    into the lib/ dir (this is for mtanh fits for temperature)
 3) pip install csaps
@@ -9,8 +13,6 @@ Requires
    this is to make libspline.o, called by pcs_fit_helpers.py
    which is in turn called by pcs_spline_1d (pcs spline for
    rotation)
-4) module purge, then module load toksearch
-Run as python new_database_maker.py configs/etemp.yaml
 '''
 
 from toksearch import PtDataSignal, MdsSignal, Pipeline
@@ -30,6 +32,7 @@ import matplotlib.pyplot as plt
 import yaml
 import argparse
 import h5py
+import datetime # for dealing with getting the datetime from the summaries table
 
 parser = argparse.ArgumentParser(description='Read tokamak data via toksearch.')
 parser.add_argument('config_filename', type=str,
@@ -48,6 +51,42 @@ for sig in cfg['data']['efit_scalar_sig_names']+cfg['data']['efit_profile_sig_na
 if cfg['data']['include_rhovn']:
     name_map['rhovn']=f"rhovn_{cfg['data']['efit_type']}"
 
+needed_sigs=[]
+needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['efit_profile_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['efit_scalar_sig_names'] ]
+needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
+if cfg['data']['include_psirz']:
+    needed_sigs+=['psirz','psirz_r','psirz_z']
+if cfg['data']['include_rhovn']:
+    needed_sigs+=['rhovn']
+for sig_name in cfg['data']['cer_sig_names']:
+    needed_sigs+=[f'cer_{sig_name}_raw_1d',
+                  #f'cer_{sig_name}_uncertainty_raw_1d', no real uncertainty for CER
+                  f'cer_{sig_name}_psi_raw_1d',
+                  f'cer_{sig_name}_r_raw_1d']
+for sig_name in cfg['data']['thomson_sig_names']:
+    needed_sigs+=[f'thomson_{sig_name}_raw_1d',
+                  f'thomson_{sig_name}_uncertainty_raw_1d',
+                  f'thomson_{sig_name}_psi_raw_1d']
+if cfg['data']['include_radiation']:
+    for i in range(1,25):
+        for position in ['L','U']:
+            needed_sigs+=[f'prad{position}{i}']
+    for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
+        needed_sigs+=[f'prad{key}']
+if cfg['data']['include_full_ech_data']:
+    needed_sigs+=['ech_names','ech_frequency','ech_R','ech_Z',
+                  'ech_pwr','ech_aziang','ech_polang']
+if cfg['data']['include_full_nb_data']:
+    needed_sigs+=['nb_pinj','nb_tinj','nb_vinj','nb_vinj_scalar','nb_210_rtan','nb_150_tilt']
+for trial_fit in cfg['data']['trial_fits']:
+    needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
+    needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
+needed_sigs+=['zipfit_{}_rho'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+needed_sigs+=['zipfit_{}_psi'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
 
 ##########################
 
@@ -79,7 +118,7 @@ fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
 fit_functions_1d=['linear_interp_1d', 'spline_1d', 'pcs_spline_1d', 'mtanh_1d','csaps_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
-filename=cfg['logistics']['output_file']
+filename=os.path.expandvars(cfg['logistics']['output_file'])
 
 standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
 with h5py.File(filename,'a') as final_data:
@@ -87,6 +126,10 @@ with h5py.File(filename,'a') as final_data:
         assert np.all(final_data['times']==standard_times), f"Time in existing h5 file {filename} different from the one you attempt to read (based on config file's tmin, tmax, time_step)"
     else:
         final_data['times']=standard_times
+    if 'spatial_coordinates' in final_data:
+        assert np.all(final_data['spatial_coordinates']==standard_x), f"Time in existing h5 file {filename} different from the one you attempt to read (based on config file's tmin, tmax, time_step)"
+    else:
+        final_data['spatial_coordinates']=standard_x
 
 if cfg['logistics']['overwrite_shots']:
     with h5py.File(filename,'a') as final_data:
@@ -106,11 +149,16 @@ for which_shot,shots in enumerate(subshots):
 
     # pipeline for SQL signals
     if len(cfg['data']['sql_sig_names'])>0:
-        query="select shot,{} from summaries where shot in {}".format(
+        conn = connect_d3drdb()
+        # you can continue adding joins to make sure all signals get collected
+        query="""SELECT summaries.shot,{}
+                 FROM summaries
+                 INNER JOIN shots ON summaries.shot=shots.shot
+                 WHERE summaries.shot in {}
+              """.format(
             ','.join(cfg['data']['sql_sig_names']),
             '({})'.format(','.join([str(elem) for elem in shots]))
             )
-        conn = connect_d3drdb()
         pipeline = Pipeline.from_sql(conn, query)
         records=pipeline.compute_serial()
         with h5py.File(filename,'a') as final_data:
@@ -118,11 +166,42 @@ for which_shot,shots in enumerate(subshots):
                 shot=str(record['shot'])
                 final_data.require_group(shot)
                 for sig in cfg['data']['sql_sig_names']:
+                    sig_name=sig+'_sql'
                     # if we get None it throws an error...
                     if record[sig]==None:
-                        final_data[shot][sig]=np.nan
+                        final_data[shot][sig_name]=np.nan
+                    # primarily for dealing with time_of_shot in summaries table
+                    elif isinstance(record[sig],datetime.datetime):
+                        final_data[shot][sig_name]=str(record[sig])
                     else:
-                        final_data[shot][sig]=record[sig]
+                        final_data[shot][sig_name]=record[sig]
+
+    # pipeline for GAS
+    if cfg['data']['include_gas_valve_info']:
+        gas_sigs=['gas','valve']
+        conn = connect_d3drdb()
+        # you can continue adding joins to make sure all signals get collected
+        query="""SELECT shot,{}
+                 FROM gasvalves
+                 WHERE shot in {}
+              """.format(
+            ','.join(gas_sigs),
+            '({})'.format(','.join([str(elem) for elem in shots]))
+            )
+        pipeline = Pipeline.from_sql(conn, query)
+        records=pipeline.compute_serial()
+        tmp_dic={str(shot): {sig: [] for sig in gas_sigs} for shot in shots}
+        for record in records:
+            for sig in gas_sigs:
+                shot=str(record['shot'])
+                tmp_dic[shot][sig].append(record[sig])
+        with h5py.File(filename,'a') as final_data:
+            for shot in tmp_dic:
+                final_data.require_group(shot)
+                for sig in gas_sigs:
+                    sig_name=sig+'_sql'
+                    final_data[shot][sig_name]=tmp_dic[shot][sig]
+
     # pipeline for regular signals
     pipeline = Pipeline(shots)
 
@@ -178,7 +257,7 @@ for which_shot,shots in enumerate(subshots):
         pipeline.fetch('ssibry_full',ssibry_sig)
 
     ######## FETCH RHOVN ###############
-    if cfg['data']['include_rhovn']:
+    if cfg['data']['include_rhovn'] or len(cfg['data']['zipfit_sig_names'])>0:
         rhovn_sig = MdsSignal(r'\rhovn',
                               cfg['data']['efit_type'],
                               location='remote://atlas.gat.com',
@@ -262,14 +341,112 @@ for which_shot,shots in enumerate(subshots):
             radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.PRAD.{key}',
                                     'SPECTROSCOPY')
             pipeline.fetch(f'prad{key}_full',radiation_sig)
+
+    ######## ECH DETAILED INFO #########
+    if cfg['data']['include_full_ech_data']:
+        num_systems=MdsSignal('ECH.NUM_SYSTEMS','RF',dims=())
+        pipeline.fetch('ech_num_systems',num_systems)
+        for i in range(1,7):
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.NAME','RF',dims=())
+            pipeline.fetch(f'ech_name_{i}',signal)
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.FREQUENCY','RF',dims=())
+            pipeline.fetch(f'ech_frequency_{i}',signal)
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_R','RF',dims=())
+            pipeline.fetch(f'ech_R_{i}',signal)
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_Z','RF',dims=())
+            pipeline.fetch(f'ech_Z_{i}',signal)
+
+        #https://diii-d.gat.com/diii-d/ECHStatus
+        for gyro in ['LEIA', 'LUKE', 'R2D2', #active
+                     'YODA', #starting up
+                     'SCARECROW', 'TINMAN', 'CHEWBACCA', #retired
+                     'TOTO', 'NATASHA', 'KATYA', #not on website but in tree
+                     'LION', 'HAN', 'NASA', 'VADER']: #not operational
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}AZIANG','RF')
+            pipeline.fetch(f'ech_aziang_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}POLANG','RF')
+            pipeline.fetch(f'ech_polang_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}FPWRC','RF')
+            pipeline.fetch(f'ech_pwr_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}XMFRAC','RF')
+            pipeline.fetch(f'ech_xmfrac_{gyro}',signal)
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}STAT','RF',dims=())
+            pipeline.fetch(f'ech_stat_{gyro}',signal)
+
+    ######## NB DETAILED INFO #########
+    if cfg['data']['include_full_nb_data']:
+        for beam in [30,150,210,330]:
+            beam_name=str(beam)[:2]
+            for location in ['L','R']:
+                # PINJ_ is not there for older shots, which is incredibly annoying
+                # DIIID-BEAMS script (see OMFIT-source/modules/DIIID-BEAMS/SCRIPTS/LIB/OMFITlib_utilities)
+                # handles this by taking the scalar value and multiplying by BEAMSTAT
+                signal=MdsSignal(f'NB{beam_name}{location}.PINJ_{beam_name}{location}','NB')
+                pipeline.fetch(f'nb_{beam}{location}_pinj',signal)
+                signal=MdsSignal(f'NB{beam_name}{location}.TINJ_{beam_name}{location}','NB')
+                pipeline.fetch(f'nb_{beam}{location}_tinj',signal)
+                signal=MdsSignal(f'NB{beam_name}{location}.VBEAM','NB')
+                pipeline.fetch(f'nb_{beam}{location}_vinj',signal)
+                signal=MdsSignal(f'NB{beam_name}{location}.NBVAC_SCALAR','NB',dims=())
+                pipeline.fetch(f'nb_{beam}{location}_vinj_scalar',signal)
+        signal=MdsSignal(f'NB15L.OANB.BLPTCH_CAD','NB',dims=())
+        pipeline.fetch(f'nb_150_tilt',signal)
+        signal=MdsSignal(f'NB21L.CCOANB.BLROT','NB',dims=())
+        pipeline.fetch(f'nb_210_rtan',signal)
+
     @pipeline.map
     def add_timebase(record):
         standard_times=np.arange(cfg['data']['tmin'],cfg['data']['tmax'],cfg['data']['time_step'])
         record['standard_time']=standard_times
 
+    if cfg['data']['include_full_ech_data']:
+        @pipeline.map
+        def add_ech_info(record):
+            num_systems=record['ech_num_systems']['data']
+            record['ech_names']=[]
+            sigs_0d=['frequency','R','Z']
+            sigs_1d=['pwr','aziang','polang']
+            for key in sigs_0d+sigs_1d:
+                record[f'ech_{key}']=[]
+            for i in range(1,num_systems+1):
+                gyro=record[f'ech_name_{i}']['data'].upper()
+                record['ech_names'].append(gyro)
+                for key in sigs_0d:
+                    record[f'ech_{key}'].append(record[f'ech_{key}_{i}']['data'])
+                for key in sigs_1d:
+                    record[f'ech_{key}'].append(standardize_time(record[f'ech_{key}_{gyro}']['data'],
+                                                                record[f'ech_{key}_{gyro}']['times'],
+                                                                record['standard_time']))
+
+    if cfg['data']['include_full_nb_data']:
+        @pipeline.map
+        def add_nb_info(record):
+            sigs_1d=['pinj','tinj','vinj'] #make sure vinj is last since it fails on shots without time-dependent v
+            for sig in sigs_1d:
+                record[f'nb_{sig}']=[]
+            record['nb_vinj_scalar']=[]
+            for sig in ['nb_210_rtan','nb_150_tilt']:
+                try:
+                    assert(record[sig]['data'] is not None)
+                    record[sig]=record[sig]['data']
+                except:
+                    record[sig]=np.nan
+            for sig in sigs_1d:
+                for beam in [30,150,210,330]:
+                    for location in ['L','R']:
+                        try:
+                            record[f'nb_{sig}'].append(standardize_time(record[f'nb_{beam}{location}_{sig}']['data'],
+                                                                        record[f'nb_{beam}{location}_{sig}']['times'],
+                                                                        record['standard_time']))
+                        except:
+                            pass
+            for beam in [30,150,210,330]:
+                for location in ['L','R']:
+                    record['nb_vinj_scalar'].append(record[f'nb_{beam}{location}_vinj_scalar']['data'])
+
     @pipeline.map
     def change_timebase(record):
-        all_sig_names=name_map.keys()
+        all_sig_names=needed_sigs
         for sig_name in all_sig_names:
             try:
                 record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
@@ -292,7 +469,6 @@ for which_shot,shots in enumerate(subshots):
                     record[sig_name]=np.array(data)
             except:
                 pass
-                #print('missing {}'.format(sig_name))
 
     if cfg['data']['include_psirz'] or psirz_needed:
         @pipeline.map
@@ -310,28 +486,38 @@ for which_shot,shots in enumerate(subshots):
             record['psirz_r']=record['psirz_full']['r']
             record['psirz_z']=record['psirz_full']['z']
 
-    if cfg['data']['include_rhovn']:
+    @pipeline.map
+    def zipfit_rho(record):
+        for sig_name in cfg['data']['zipfit_sig_names']:
+            record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
+                                                                       record['zipfit_{}_full'.format(sig_name)]['times'],
+                                                                       record['standard_time'])
+            tmp=[]
+            rhon=record['zipfit_{}_full'.format(sig_name)]['rhon']
+            for time_ind in range(len(record['standard_time'])):
+                rho_to_zipfit=my_interp(rhon,
+                                        record['zipfit_{}_rhon_basis'.format(sig_name)][time_ind])
+                tmp.append(rho_to_zipfit(standard_x))
+            record['zipfit_{}_rho'.format(sig_name)]=np.array(tmp)
+
+    if cfg['data']['include_rhovn'] or len(cfg['data']['zipfit_sig_names'])>0:
         @pipeline.map
         def add_rhovn(record):
             record['rhovn']=standardize_time(record['rhovn_full']['data'],
                                              record['rhovn_full']['times'],
                                              record['standard_time'])
-#        @pipeline.map
-        def zipfit_rhovn_to_psin(record):
+        @pipeline.map
+        def zipfit_psi(record):
             for sig_name in cfg['data']['zipfit_sig_names']:
-                record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
-                                                                           record['zipfit_{}_full'.format(sig_name)]['times'],
-                                                                           record['standard_time'])
-
                 rho_to_psi=[my_interp(record['rhovn'][time_ind],
                                       record['rhovn_full']['psi']) for time_ind in range(len(record['standard_time']))]
-                record['zipfit_{}_psi'.format(sig_name)]=[]
+                record['zipfit_{}_psi_full'.format(sig_name)]=[]
                 for time_ind in range(len(record['standard_time'])):
-                    record['zipfit_{}_psi'.format(sig_name)].append(rho_to_psi[time_ind](record['zipfit_{}_full'.format(sig_name)]['rhon']))
-                record['zipfit_{}_psi'.format(sig_name)]=np.array(record['zipfit_{}_psi'.format(sig_name)])
+                    record['zipfit_{}_psi_full'.format(sig_name)].append(rho_to_psi[time_ind](record['zipfit_{}_full'.format(sig_name)]['rhon']))
+                record['zipfit_{}_psi_full'.format(sig_name)]=np.array(record['zipfit_{}_psi_full'.format(sig_name)])
 
                 zipfit_interp=fit_function_dict['linear_interp_1d']
-                record['zipfit_{}'.format(sig_name)]=zipfit_interp(record['zipfit_{}_psi'.format(sig_name)],
+                record['zipfit_{}_psi'.format(sig_name)]=zipfit_interp(record['zipfit_{}_psi_full'.format(sig_name)],
                                                                    record['standard_time'],
                                                                    record['zipfit_{}_rhon_basis'.format(sig_name)],
                                                                    np.ones(record['zipfit_{}_rhon_basis'.format(sig_name)].shape),
@@ -405,9 +591,9 @@ for which_shot,shots in enumerate(subshots):
                         value.append(standardize_time(record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['data'],
                                                       record['cer_{}_{}_{}_full'.format(cer_area,sig_name,channel)]['times'],
                                                       record['standard_time']))
-                        # set to true for rotation if we want to convert km/s to kHz/s
-                        if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_kHz']):
-                            value[-1]=np.divide(value[-1],2*np.pi*r)
+                        # set to true for rotation if we want to convert km/s to krad/s
+                        if (sig_name=='rot' and cfg['data']['cer_rotation_units_of_krad']):
+                            value[-1]=np.divide(value[-1],r)
                         psi.append([r_z_to_psi[time_ind](r[time_ind],z[time_ind])[0] \
                                     for time_ind in range(len(record['standard_time']))])
                         error.append(standardize_time(record['cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel)]['data'],
@@ -442,40 +628,7 @@ for which_shot,shots in enumerate(subshots):
                                                                           record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
                                                                           record['standard_time']))
 
-    if not cfg['data']['gather_raw']:
-        needed_sigs=[]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['efit_profile_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['efit_scalar_sig_names'] ]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
-        needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
-
-        if cfg['data']['include_psirz']:
-            needed_sigs+=['psirz','psirz_r','psirz_z']
-        if cfg['data']['include_rhovn']:
-            needed_sigs+=['rhovn']
-        for sig_name in cfg['data']['cer_sig_names']:
-            needed_sigs+=[f'cer_{sig_name}_raw_1d',
-                          #f'cer_{sig_name}_uncertainty_raw_1d', no real uncertainty for CER
-                          f'cer_{sig_name}_psi_raw_1d',
-                          f'cer_{sig_name}_r_raw_1d']
-        for sig_name in cfg['data']['thomson_sig_names']:
-            needed_sigs+=[f'thomson_{sig_name}_raw_1d',
-                          f'thomson_{sig_name}_uncertainty_raw_1d',
-                          f'thomson_{sig_name}_psi_raw_1d']
-        if cfg['data']['include_radiation']:
-            for i in range(1,25):
-                for position in ['L','U']:
-                    needed_sigs+=[f'prad{position}{i}']
-            for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
-                needed_sigs+=[f'prad{key}']
-
-        for trial_fit in cfg['data']['trial_fits']:
-            needed_sigs+=['cer_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['cer_sig_names']]
-            needed_sigs+=['thomson_{}_{}'.format(sig_name,trial_fit) for sig_name in cfg['data']['thomson_sig_names']]
-        needed_sigs+=['zipfit_{}_rhon_basis'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
-        needed_sigs+=['zipfit_{}'.format(sig_name) for sig_name in cfg['data']['zipfit_sig_names']]
+    if True: #not cfg['data']['gather_raw']: <-- deprecated (annoying to gather random datatypes into h5)
         # use below to discard unneeded info
         pipeline.keep(needed_sigs)
 
@@ -502,93 +655,9 @@ for which_shot,shots in enumerate(subshots):
                 if sig=='shot' or sig=='errors':
                     continue
                 if sig in name_map:
-                    # for handling zipfit
-                    if 'rhon_basis' in sig:
-                        tmp=[]
-                        rhon=record['zipfit_{}_full'.format(cfg['data']['zipfit_sig_names'][0])]['rhon']
-                        for time_ind in range(len(record['standard_time'])):
-                            rho_to_zipfit=my_interp(rhon,
-                                                    record[sig][time_ind])
-                            tmp.append(rho_to_zipfit(standard_x))
-                        final_data[shot][name_map[sig]]=np.array(final_data[shot][name_map[sig]])
-                    else:
-                        scale_factor=1
-                        if name_map[sig]=='curr_target':
-                            scale_factor=0.5e6
-                        final_data[shot][name_map[sig]]=np.array(record[sig])*scale_factor
+                    final_data[shot][name_map[sig]]=record[sig]
                 else:
                     final_data[shot][sig]=record[sig]
-            print(final_data[shot].keys())
-    # for i in range(len(records)):
-    #     record=records[i]
-        # to accomodate the old code's bug of flipping top and bottom
-    #     if False:
-    #         tmp=final_data[shot]['triangularity_top_EFIT01'].copy()
-    #         final_data[shot]['triangularity_top_EFIT01']=final_data[shot]['triangularity_bot_EFIT01'].copy()
-    #         final_data[shot]['triangularity_bot_EFIT01']=tmp
-    #         final_data[shot]['pinj_full']=record['pinj_full']
-    #         final_data[shot]['tinj_full']=record['tinj_full']
-    #         final_data[shot]['iptipp_full']=record['iptipp_full']
-    #         final_data[shot]['iptipp_full']['data']*=.5e6
-    #         final_data[shot]['dstdenp_full']=record['dstdenp_full']
-    #         final_data[shot]['volume_full']=record['volume_full']
-    #         final_data[shot]['n1rms_full']=record['n1rms_full']
-    # with open(filename,'wb') as f:
-    #     pickle.dump(final_data, f)
-
-if cfg['logistics']['debug']:
-    for shot in final_data:
-        print(shot)
-        print(final_data[shot].keys())
-#    print(records[0]['cer_VERTICAL_temp_20_full'])
-    #print('errors: ')
-    #print(records[0]['errors'])
-    if 'thomson' in cfg['logistics']['debug_sig_name'] or 'cer' in cfg['logistics']['debug_sig_name']:
-        xlist=[records[0]['{}_psi_raw_1d'.format(cfg['logistics']['debug_sig_name'])]]
-        ylist=[records[0]['{}_raw_1d'.format(cfg['logistics']['debug_sig_name'])]]
-        uncertaintylist=[records[0]['{}_uncertainty_raw_1d'.format(cfg['logistics']['debug_sig_name'])]]
-        labels=['raw']
-        for trial_fit in cfg['data']['trial_fits']:
-            xlist.append(standard_x)
-            ylist.append(records[0]['{}_{}'.format(cfg['logistics']['debug_sig_name'],trial_fit)])
-            uncertaintylist.append(None)
-            labels.append(trial_fit)
-        xlist.append(standard_x)
-        ylist.append(records[0]['zipfit_{}'.format(zipfit_pairs[cfg['logistics']['debug_sig_name']])])
-        uncertaintylist.append(None)
-        labels.append('zipfit_{}'.format(zipfit_pairs[cfg['logistics']['debug_sig_name']]))
-        plot_comparison_over_time(xlist=xlist,
-                                  ylist=ylist,
-                                  time=records[0]['standard_time'],
-                                  ylabel=cfg['logistics']['debug_sig_name'],
-                                  xlabel='psi',
-                                  uncertaintylist=uncertaintylist,
-                                  labels=labels)
-
-    if cfg['logistics']['debug_sig_name'] in cfg['data']['scalar_sig_names']+cfg['data']['efit_scalar_sig_names'] +cfg['data']['nb_sig_names']:
-        plt.scatter(records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['times'][::100],
-                    records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['data'][::100],
-                    c='b',
-                    label='original')
-        plt.plot(records[0]['standard_time'],
-                 records[0][cfg['logistics']['debug_sig_name']],
-                 c='r',
-                 label='interpolated')
-        plt.legend()
-        plt.xlabel('time (unit: {})'.format(records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['units']['times']))
-        plt.ylabel('{} (unit: {})'.format(cfg['logistics']['debug_sig_name'], records[0]['{}_full'.format(cfg['logistics']['debug_sig_name'])]['units']['data']))
-        plt.show()
-
-    if cfg['logistics']['debug_sig_name'] in cfg['data']['efit_profile_sig_names']:
-        xlist=[standard_x]
-        ylist=[records[0]['{}'.format(cfg['logistics']['debug_sig_name'])]]
-        uncertaintylist=[None]
-        labels=[cfg['logistics']['debug_sig_name']]
-        plot_comparison_over_time(xlist=xlist,
-                                  ylist=ylist,
-                                  time=records[0]['standard_time'],
-                                  ylabel=cfg['logistics']['debug_sig_name'],
-                                  xlabel='psi',
-                                  uncertaintylist=uncertaintylist,
-                                  labels=labels)
-
+            # for key in record['errors']:
+            #     print(key)
+            #     print(record['errors'][key]['traceback'].replace('\\n','\n'))

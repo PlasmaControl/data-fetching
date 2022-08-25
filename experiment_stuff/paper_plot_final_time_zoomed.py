@@ -39,7 +39,7 @@ shot=187076
 times=np.arange(1000,3000,10)
 # make the below single-valued to plot profiles at that time
 # make the below None to plot all
-profiles_to_plot=['temp','press_EFIT01']
+profiles_to_plot=['temp']
 actuators_to_plot=['pinj']
 scalars_to_plot=[] #['density_estimate'] #None
 profiles=['temp','dens','rotation','press_EFIT01','q_EFIT01']
@@ -47,12 +47,12 @@ scalars=['density_estimate']
 actuators=['pinj', 'tinj', 'curr_target', 'target_density']
 
 ylimits={key: (None, None) for key in actuators+profiles+scalars}
-ylimits['temp']= (0,3.9) #3400),
+ylimits['temp']= (2.5,3.2) #3400),
 ylimits['dens']= (0,7)
 ylimits['rotation']= (20,300)
 ylimits['q_EFIT01']= (0,4)
 ylimits['press_EFIT01']= (0,110)
-ylimits['pinj']= (0, 9)
+ylimits['pinj']= (2, 9)
 ylimits['tinj']= (-2,7)
 ylimits['curr_target']= (0.7e6,1.1e6)
 ylimits['target_density']= (0,5)
@@ -257,9 +257,11 @@ time_inds=np.searchsorted(times,final_info['times'])
 final_times=final_info['times'][time_inds]*1e-3
 rho_ind=1
 
-nplots=len(profiles_to_plot)+len(actuators_to_plot)+len(scalars_to_plot)+1
+nplots=len(profiles_to_plot)+1
 fig,axes=plt.subplots(nplots, sharex=True, figsize=(7,10))
 axes=np.atleast_1d(axes)
+for ax in axes:
+    ax.axvline(2.42,linestyle='--',c='k',zorder=-1)
 
 num_proposals=len(final_info[f'{actuators[0]}_proposals'][0])
 cmap=[matplotlib_parameters.colorblind_colors[i] for i in [1,2,0]]
@@ -277,22 +279,22 @@ for i,elem in enumerate(actuators_to_plot+scalars_to_plot):
                                        np.array(final_info[f'{elem}_input'])[time_inds,-1],
                                        c='0.45',linewidth=8)
 # simshots don't have processed pinj
-if shot<900000:
-    toksig=toksearch.MdsSignal(r'\pinj',
-                     'NB',
-                     location='remote://atlas.gat.com').fetch(shot)
-    j=actuators_to_plot.index('pinj')
-    axes[len(profiles_to_plot)+j].plot(toksig['times']*1e-3,
-                                       toksig['data']*1e-3,
-                                       c='0.45',
-                                       linewidth=0.8)
+# if shot<900000:
+#     toksig=toksearch.MdsSignal(r'\pinj',
+#                      'NB',
+#                      location='remote://atlas.gat.com').fetch(shot)
+#     j=actuators_to_plot.index('pinj')
+#     axes[len(profiles_to_plot)+j].plot(toksig['times']*1e-3,
+#                                        toksig['data']*1e-3,
+#                                        c='0.45',
+#                                        linewidth=0.8)
 for i in range(num_proposals):
     # plot future actuators for each proposal
-    for j,elem in enumerate(actuators_to_plot):
-        #plot proposal corresponding to 200ms into future
-        axes[len(profiles_to_plot)+j].plot(final_times,
-                                           np.array(final_info[f'{elem}_proposals'])[time_inds,i,-1],
-                                           c=cmap[i])
+    # for j,elem in enumerate(actuators_to_plot):
+    #     #plot proposal corresponding to 200ms into future
+    #     axes[len(profiles_to_plot)+j].plot(final_times,
+    #                                        np.array(final_info[f'{elem}_proposals'])[time_inds,i,-1],
+    #                                        c=cmap[i])
     # plot profile predictions for each proposal
     for j,profile in enumerate(profiles_to_plot):
         axes[j].plot(final_times,
@@ -334,11 +336,11 @@ proposals['pinj'][2]['times']=which_proposal['times'][increasing_mask]
 proposals['pinj'][2]['ycoords']=[rate]*len(proposals['pinj'][2]['times'])
 
 for i in range(3):
-    axes[len(profiles_to_plot)+len(actuators_to_plot)].scatter(proposals['pinj'][i]['times']*1e-3,
-                                                               np.array(proposals['pinj'][i]['ycoords']),
-                                                               c=cmap[(len(cmap)-1)-i])
-axes[len(profiles_to_plot)+len(actuators_to_plot)].set_ylabel(r'$\Delta$ target $pinj$ (MW)')
-axes[len(profiles_to_plot)+len(actuators_to_plot)].set_ylim(-0.4,0.4)
+    axes[-1].scatter(proposals['pinj'][i]['times']*1e-3,
+                     np.array(proposals['pinj'][i]['ycoords']),
+                     c=cmap[(len(cmap)-1)-i])
+axes[-1].set_ylabel(r'$\Delta$ target $pinj$ (MW)')
+axes[-1].set_ylim(-0.4,0.4)
 
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator)
@@ -346,34 +348,34 @@ for i in range(len(profiles_to_plot)):
     ax=axes[i]
     ax.set_ylabel(ylabels[profiles_to_plot[i]])
     ax.set_ylim(ylimits[profiles_to_plot[i]])
-for i in range(len(actuators_to_plot)):
-    ax=axes[len(profiles_to_plot)+i]
-    ax.set_ylabel(ylabels[actuators_to_plot[i]])
-    ax.set_ylim(ylimits[actuators_to_plot[i]])
+# for i in range(len(actuators_to_plot)):
+#     ax=axes[len(profiles_to_plot)+i]
+#     ax.set_ylabel(ylabels[actuators_to_plot[i]])
+#     ax.set_ylim(ylimits[actuators_to_plot[i]])
 
-axes[0].yaxis.set_major_locator(MultipleLocator(1))
-axes[0].yaxis.set_minor_locator(MultipleLocator(0.2))
-axes[1].yaxis.set_major_locator(MultipleLocator(20))
-axes[1].yaxis.set_minor_locator(MultipleLocator(5))
-axes[2].yaxis.set_major_locator(MultipleLocator(2))
-axes[2].yaxis.set_minor_locator(MultipleLocator(0.5))
-axes[len(profiles_to_plot)+len(actuators_to_plot)].yaxis.set_major_locator(MultipleLocator(0.3))
-axes[len(profiles_to_plot)+len(actuators_to_plot)].yaxis.set_minor_locator(MultipleLocator(0.1))
+axes[0].yaxis.set_major_locator(MultipleLocator(0.2))
+axes[0].yaxis.set_minor_locator(MultipleLocator(0.05))
+#axes[1].yaxis.set_major_locator(MultipleLocator(20))
+#axes[1].yaxis.set_minor_locator(MultipleLocator(5))
+#axes[1].yaxis.set_major_locator(MultipleLocator(2))
+#axes[1].yaxis.set_minor_locator(MultipleLocator(0.5))
+axes[-1].yaxis.set_major_locator(MultipleLocator(0.3))
+axes[-1].yaxis.set_minor_locator(MultipleLocator(0.1))
 
 handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc='lower right',bbox_to_anchor=(1,0.475))
 
-for i in range(len(axes)):
-    axes[i].axvspan(1.350,1.730,color=matplotlib_parameters.matlab_colors[-1],alpha=0.3)
-axes[1].text((1.350+1.730)/2,85,'rtEFIT\nError',ha='center',va='center')
-axes[1].annotate('Estimate\nrecovers',xy=(1.73,60), xycoords='data', xytext=(1.87,100),arrowprops=dict(facecolor='black', shrink=0.05),horizontalalignment='right',verticalalignment='top',ha='center')
-axes[1].axvspan(2.,3.,color='k',alpha=0.2)
-t=axes[1].text(2.5,35,'Pressure\nControl Off',ha='center',va='center')
+# for i in range(len(axes)):
+#     axes[i].axvspan(1.350,1.730,color=matplotlib_parameters.matlab_colors[-1],alpha=0.3)
+# axes[1].text((1.350+1.730)/2,85,'rtEFIT\nError',ha='center',va='center')
+# axes[1].annotate('Estimate\nrecovers',xy=(1.73,60), xycoords='data', xytext=(1.87,100),arrowprops=dict(facecolor='black', shrink=0.05),horizontalalignment='right',verticalalignment='top',ha='center')
+# axes[1].axvspan(2.,3.,color='k',alpha=0.2)
+# t=axes[1].text(2.5,35,'Pressure\nControl Off',ha='center',va='center')
 
-axes[-1].set_xlim(1.35,3)
-axes[-1].xaxis.set_major_locator(MultipleLocator(0.2))
-axes[-1].xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-axes[-1].xaxis.set_minor_locator(MultipleLocator(0.05))
+axes[-1].set_xlim(2.325,2.495)
+axes[-1].xaxis.set_major_locator(MultipleLocator(0.05))
+axes[-1].xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+axes[-1].xaxis.set_minor_locator(MultipleLocator(0.01))
 axes[-1].set_xlabel('Time (s)')
 
 # show that the target temp goes up
@@ -392,27 +394,27 @@ axes[0].arrow(2.49,
               color='k',
               zorder=10)
 '''
-axes[0].text(2.53,ylimits['temp'][-1],'6keV target',va='top')
+#axes[0].text(2.53,ylimits['temp'][-1],'6keV target',va='top')
 
 # add Phase labels
-for i in range(len(axes)):
-    for phase_location in [2,2.5]:
-        # for all except pressure, which is not being controlled at 2.5
-        # and has text we don't want to cover...
-        if not (i==1 and phase_location==2.5):
-            axes[i].axvline(phase_location,c='k',zorder=-1,
-                            linewidth=2*matplotlib.rcParams['lines.linewidth'])
-phase_text_locs=[(2-1.35)/2+1.35,2.25,2.75]
-phase_labels=['Phase I','Phase II','Phase III']
-for i in range(3):
-    axes[0].text(phase_text_locs[i],1.1,phase_labels[i],
-                 va='top',ha='center',
-                 fontsize=1.6*matplotlib.rcParams['font.size'],bbox=dict(facecolor='white'))
+# for i in range(len(axes)):
+#     for phase_location in [2,2.5]:
+#         # for all except pressure, which is not being controlled at 2.5
+#         # and has text we don't want to cover...
+#         if not (i==1 and phase_location==2.5):
+#             axes[i].axvline(phase_location,c='k',zorder=-1,
+#                             linewidth=2*matplotlib.rcParams['lines.linewidth'])
+# phase_text_locs=[(2-1.35)/2+1.35,2.25,2.75]
+# phase_labels=['Phase I','Phase II','Phase III']
+# for i in range(3):
+#     axes[0].text(phase_text_locs[i],1.1,phase_labels[i],
+#                  va='top',ha='center',
+#                  fontsize=1.6*matplotlib.rcParams['font.size'],bbox=dict(facecolor='white'))
 
 for ax in axes:
     ax.tick_params('both',direction="in",which='both')
     ax.tick_params('both',length=3,which='minor')
     ax.tick_params('both',length=8,which='major')
-plt.savefig('paper_plot_final_time.png')
-plt.savefig('paper_plot_final_time.pdf')
-plt.show()
+plt.savefig('paper_plot_final_time_zoomed.png')
+plt.savefig('paper_plot_final_time_zoomed.pdf')
+#plt.show()
