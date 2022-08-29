@@ -42,22 +42,16 @@ args = parser.parse_args()
 with open(args.config_filename,"r") as f:
     cfg=yaml.safe_load(f)
 
-from database_settings import pcs_length, name_map, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, thomson_areas, thomson_scale
-for sig in cfg['data']['efit_scalar_sig_names']+cfg['data']['efit_profile_sig_names']:
-    if sig in name_map:
-        name_map[sig]=name_map[sig]+f"_{cfg['data']['efit_type']}"
-    else:
-        name_map[sig]=sig+f"_{cfg['data']['efit_type']}"
-if cfg['data']['include_rhovn']:
-    name_map['rhovn']=f"rhovn_{cfg['data']['efit_type']}"
+from database_settings import pcs_length, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, thomson_areas, thomson_scale
 
 needed_sigs=[]
 needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
-needed_sigs+=[sig_name for sig_name in cfg['data']['efit_profile_sig_names']]
-needed_sigs+=[sig_name for sig_name in cfg['data']['efit_scalar_sig_names'] ]
 needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
+for efit_type in cfg['data']['efit_types']:
+    needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_profile_sig_names']]
+    needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_scalar_sig_names'] ]
 if cfg['data']['include_psirz']:
     needed_sigs+=['psirz','psirz_r','psirz_z']
 if cfg['data']['include_rhovn']:
@@ -225,41 +219,43 @@ for which_shot,shots in enumerate(subshots):
         pipeline.fetch('{}_full'.format(sig_name),signal)
 
     ######## FETCH EFIT PROFILES #############
-    for sig_name in cfg['data']['efit_profile_sig_names']:
-        signal=MdsSignal('RESULTS.GEQDSK.{}'.format(sig_name),
-                         cfg['data']['efit_type'],
-                         location='remote://atlas.gat.com',
-                         dims=['psi','times'])
-        pipeline.fetch('{}_full'.format(sig_name),signal)
-
+    for efit_type in cfg['data']['efit_types']:
+        for sig_name in cfg['data']['efit_profile_sig_names']:
+            signal=MdsSignal('RESULTS.GEQDSK.{}'.format(sig_name),
+                             efit_type,
+                             location='remote://atlas.gat.com',
+                             dims=['psi','times'])
+            pipeline.fetch('{}_{}_full'.format(sig_name,efit_type),
+                           signal)
     ######## FETCH EFIT PROFILES #############
-    for sig_name in cfg['data']['efit_scalar_sig_names'] :
-        signal=MdsSignal(r'\{}'.format(sig_name.upper()),
-                         cfg['data']['efit_type'],
-                         location='remote://atlas.gat.com')
-        pipeline.fetch('{}_full'.format(sig_name),signal)
+        for sig_name in cfg['data']['efit_scalar_sig_names'] :
+            signal=MdsSignal(r'\{}'.format(sig_name.upper()),
+                             efit_type,
+                             location='remote://atlas.gat.com')
+            pipeline.fetch('{}_{}_full'.format(sig_name,efit_type),
+                           signal)
 
 
-    ######## FETCH PSIRZ   #############
+    ######## FETCH PSIRZ (FIRST EFIT ONLY)  #############
     if cfg['data']['include_psirz'] or psirz_needed:
         psirz_sig = MdsSignal(r'\psirz',
-                              cfg['data']['efit_type'],
+                              cfg['data']['efit_types'][0],
                               location='remote://atlas.gat.com',
                               dims=['r','z','times'])
         pipeline.fetch('psirz_full',psirz_sig)
         ssimag_sig = MdsSignal(r'\ssimag',
-                              cfg['data']['efit_type'],
+                              cfg['data']['efit_types'][0],
                               location='remote://atlas.gat.com')
         pipeline.fetch('ssimag_full',ssimag_sig)
         ssibry_sig = MdsSignal(r'\ssibry',
-                              cfg['data']['efit_type'],
+                              cfg['data']['efit_types'][0],
                               location='remote://atlas.gat.com')
         pipeline.fetch('ssibry_full',ssibry_sig)
 
-    ######## FETCH RHOVN ###############
+    ######## FETCH RHOVN (FIRST EFIT ONLY) ###############
     if cfg['data']['include_rhovn'] or len(cfg['data']['zipfit_sig_names'])>0:
         rhovn_sig = MdsSignal(r'\rhovn',
-                              cfg['data']['efit_type'],
+                              cfg['data']['efit_types'][0],
                               location='remote://atlas.gat.com',
                               dims=['psi','times'])
         pipeline.fetch('rhovn_full',rhovn_sig)
@@ -452,23 +448,17 @@ for which_shot,shots in enumerate(subshots):
                 record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
                                                   record['{}_full'.format(sig_name)]['times'],
                                                   record['standard_time'])
-                # kludged fix to exclude 'zipfit_' from the name here
-                if (sig_name[7:] in cfg['data']['zipfit_sig_names']):
-                    data=[]
-                    for time_ind in range(len(record[sig_name])):
-                        interpolator=interpolate.interp1d(record[f'{sig_name}_full']['rhon'],
-                                                          record[sig_name][time_ind,:])
-                        data.append(interpolator(standard_x))
-                    record[sig_name]=np.array(data)
-                if (sig_name in cfg['data']['efit_profile_sig_names']):
-                    data=[]
-                    for time_ind in range(len(record[sig_name])):
-                        interpolator=interpolate.interp1d(record[f'{sig_name}_full']['psi'],
-                                                          record[sig_name][time_ind,:])
-                        data.append(interpolator(standard_x))
-                    record[sig_name]=np.array(data)
             except:
                 pass
+        for efit_type in cfg['data']['efit_types']:
+            for base_sig in cfg['data']['efit_profile_sig_names']:
+                sig_name=f'{base_sig}_{efit_type}'
+                data=[]
+                for time_ind in range(len(record[sig_name])):
+                    interpolator=interpolate.interp1d(record[f'{sig_name}_full']['psi'],
+                                                      record[sig_name][time_ind,:])
+                    data.append(interpolator(standard_x))
+                record[sig_name]=np.array(data)
 
     if cfg['data']['include_psirz'] or psirz_needed:
         @pipeline.map
@@ -490,8 +480,8 @@ for which_shot,shots in enumerate(subshots):
     def zipfit_rho(record):
         for sig_name in cfg['data']['zipfit_sig_names']:
             record['zipfit_{}_rhon_basis'.format(sig_name)]=standardize_time(record['zipfit_{}_full'.format(sig_name)]['data'],
-                                                                       record['zipfit_{}_full'.format(sig_name)]['times'],
-                                                                       record['standard_time'])
+                                                                             record['zipfit_{}_full'.format(sig_name)]['times'],
+                                                                             record['standard_time'])
             tmp=[]
             rhon=record['zipfit_{}_full'.format(sig_name)]['rhon']
             for time_ind in range(len(record['standard_time'])):
@@ -647,6 +637,7 @@ for which_shot,shots in enumerate(subshots):
             records=pipeline.compute_spark(numparts=cfg['logistics']['num_processes'])
         else:
             records=pipeline.compute_serial()
+
     with h5py.File(filename,'a') as final_data:
         for record in records:
             shot=str(record['shot'])
@@ -654,10 +645,7 @@ for which_shot,shots in enumerate(subshots):
             for sig in record.keys():
                 if sig=='shot' or sig=='errors':
                     continue
-                if sig in name_map:
-                    final_data[shot][name_map[sig]]=record[sig]
-                else:
-                    final_data[shot][sig]=record[sig]
+                final_data[shot][sig]=record[sig]
             # for key in record['errors']:
             #     print(key)
             #     print(record['errors'][key]['traceback'].replace('\\n','\n'))

@@ -26,7 +26,6 @@ for sig in ['ftsspsin','pftssrot','ftsspsin','ftssmhat']:
     pcs_length[sig]=np.arange(1,76)
 for sig in ['ftstemp','ftsterr','ftsdens','ftsnerr','ftspsin','ftsrho']:
     pcs_length[sig]=np.arange(1,50)
-name_map={}
 # {'zipfit_trotfit': 'rotation',
 #           'zipfit_itempfit': 'itemp',
 #           'zipfit_etempfit': 'temp',
