@@ -1,12 +1,17 @@
 data:
-  shots: [180647] #data/shots.npy
+  shots: data/shots.npy
   tmin: 0
   tmax: 6000
   time_step: 25
   sql_sig_names: ['t_ip_flat','ip_flat_duration','topology','time_of_shot','run',
                   'poh','pech','pbeam','btor','btorsign','ip','ipsign', 'betanmax']
-  scalar_sig_names: ['vloop','echpwrc','ip','ipsiptargt','bt',
+  scalar_sig_names: ['vloop','ip','ipsiptargt','bt',
                      'gasA','gasB','gasC','gasD','gasE','pfx1','pfx2','uob',
+                     'bmspinj', 'bmstinj',
+                     'bmspinj15l','bmspinj15r','bmspinj21l','bmspinj21r',
+                     'bmspinj30l','bmspinj30r','bmspinj33l','bmspinj33r',
+                     'bmstinj15l','bmstinj15r','bmstinj21l','bmstinj21r',
+                     'bmstinj30l','bmstinj30r','bmstinj33l','bmstinj33r',
                      'dssdenest','dstdenp','dssdenp','dsiwdens','dsifbonoff','dsitgtsrc',
                      'C19','C79','C139','C199','C259','C319',
                      'IU30','IU90','IU150','IU210','IU270','IU330',
@@ -20,7 +25,7 @@ data:
   efit_scalar_sig_names: ['betap','betan','wmhd','li','q0','q95','qmin','rhoqmin',
                           'li','aminor','kappa','tritop','tribot','volume','drsep',
                           'gapbot','gapin','gapout','gaptop','rmaxis','zmaxis','zxpt1','zxpt2']
-  efit_type: 'EFIT01'
+  efit_types: ['EFIT01','EFIT02','EFIT_CAKE01','EFIT_CAKE02']
   include_psirz: False
   include_rhovn: True
   thomson_sig_names: [] #['density', 'temp']
@@ -43,7 +48,7 @@ data:
   num_x_points: 33
   trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
 logistics:
-  output_file: example.h5
+  output_file: '/mnt/beegfs/users/abbatej/example.h5'
   overwrite_shots: True
   num_processes: 1
-  max_shots_per_run: 1000
+  max_shots_per_run: 5000
