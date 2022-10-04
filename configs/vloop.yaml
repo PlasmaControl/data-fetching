@@ -1,0 +1,38 @@
+data:
+  shots: data/all_shots.npy
+  tmin: 0
+  tmax: 6000
+  time_step: 1
+  sql_sig_names: []
+  scalar_sig_names: ['vloop','ip','ipsiptargt','iptipp']
+  stability_sig_names: []
+  nb_sig_names: []
+  efit_profile_sig_names: []
+  efit_scalar_sig_names: []
+  efit_type: 'EFIT01'
+  include_psirz: False
+  include_rhovn: False
+  thomson_sig_names: [] #['density', 'temp']
+  include_thomson_uncertainty: True
+  cer_sig_names: [] #['temp','rot']
+  cer_type: 'CERQUICK'
+  cer_realtime_channels: True
+  cer_rotation_units_of_khz: True
+  zipfit_sig_names: []
+#['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
+# ['etste', 'etsne','etscr','etsct',
+#                'etstein', 'etsnein','etscrin', 'etsctin','etsinq', 'etsinprs',
+#                'etsteout', 'etsneout', 'etsqout', 'etsprsout',
+#                'etste', 'etsne','etscr','etsct']
+  pcs_sig_names: []
+  include_radiation: False
+  include_full_ech_data: False
+  include_full_nb_data: False
+  include_gas_valve_info: False
+  num_x_points: 33
+  trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
+logistics:
+  output_file: /cscratch/mehtav/vloop.h5
+  overwrite_shots: True
+  num_processes: 1
+  max_shots_per_run: 1000
