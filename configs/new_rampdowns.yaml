@@ -47,7 +47,7 @@ data:
   num_x_points: 33
   trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
 logistics:
-  output_file: /cscratch/mehtav/new_data.h5
+  output_file: /cscratch/mehtav/data.h5
   overwrite_shots: True
   num_processes: 1
   max_shots_per_run: 1000

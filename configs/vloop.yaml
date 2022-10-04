@@ -1,5 +1,5 @@
 data:
-  shots: data/all_shots.npy
+  shots: data/all.npy
   tmin: 0
   tmax: 6000
   time_step: 1

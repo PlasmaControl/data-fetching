@@ -16,7 +16,7 @@
 ################################################
 
 ## Specify the queue (a.k.a. the "p"artition)
-#SBATCH -p medium
+#SBATCH -p long 
 
 ## Specify the number of cores
 #SBATCH -n 1
@@ -31,7 +31,7 @@
 ####
 
 ## Specify the amount of time for the job (in minutes)
-#SBATCH -t 0-06:00:00
+#SBATCH -t 7-00:00:00
 ## or as -t days-HH:MM:SS, e.g. -t 7-00:00:00 for the long queue
 
 ## Specify the amount of memory required (M|G|T) per cpu:
@@ -42,7 +42,7 @@
 ## %j = jobID 
 ## %u = username 
 ## %N = (first) node name 
-#SBATCH -o simple-%j.out
+#SBATCH -o slurm-vloop-%j.out
 
 ## Optionally export your environment variables to the job,
 ## generally a good idea
