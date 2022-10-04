@@ -31,7 +31,7 @@
 ####
 
 ## Specify the amount of time for the job (in minutes)
-#SBATCH -t 1-00:00:00
+#SBATCH -t 0-06:00:00
 ## or as -t days-HH:MM:SS, e.g. -t 7-00:00:00 for the long queue
 
 ## Specify the amount of memory required (M|G|T) per cpu:
@@ -53,5 +53,5 @@
 echo "modules loaded:"
 module list
 echo "beginning job ..."
-python new_database_maker.py configs/rampdowns.yaml
+python new_database_maker.py configs/new_rampdowns.yaml
 echo " done."

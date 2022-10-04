@@ -1,16 +1,11 @@
 data:
-#shots=np.load('new_shots.npy')
-#shots = [187076] #[185769] #[163303,175970] #175970 is Colin's good modulation shot; 154764 is David Eldon's
-# shots: [188819, 188820, 188821, 188822, 188823, 188824]
   shots: data/all.npy
   tmin: 0
   tmax: 6000
   time_step: 50
-  gather_raw: False
-  #f'esl019'] #f'bmspinj{i}{j}' for i in ['30','15','21','33'] for j in ['l','r']] #['dstdenp','dssdenest','iptipp',
-  #'bt','DUSTRIPPED','ip','N1ICWMTH','N1IIWMTH','echpwr','dsifbonoff']
-  sql_sig_names: ['t_ip_flat','ip_flat_duration','topology']
-  scalar_sig_names: ['dstdenp','dssdenp','dssdenest','ipsiptargt','ip','bt', 'vloop',
+  sql_sig_names: ['t_ip_flat','ip_flat_duration','topology','time_of_shot','run',
+                  'poh','pech','pbeam','btor','btorsign','ip','ipsign', 'betanmax']
+  scalar_sig_names: ['dstdenp','dssdenp','dssdenest','ipsiptargt','ip','iptipp', 'bt', 'vloop',
                     'gasA', 'gasB', 'gasC', 'gasD', 'gasE', 'pfx1', 'pfx2', 'echpwr',
                     'efspsibdy1', 'efsg1psy', 'efsg1zx', 'efsg1rx', 'grsmean',
                     'bmspinj30l','bmspinj30r','bmspinj15l','bmspinj15r',
@@ -28,36 +23,31 @@ data:
   stability_sig_names: ['n1rms','n2rms','n3rms']
   nb_sig_names: ['pinj','tinj']
   efit_profile_sig_names: ['qpsi','pres']
-#['li','aminor','kappa','tritop','tribot','volume']
   efit_scalar_sig_names: ['li','aminor','kappa','tritop','tribot','volume','betan','betap','rmaxis', 'zmaxis','wmhd','drsep','zxpt1','zxpt2','rxpt1','rxpt2','seplim', 'gapin', 'gapout', 'gapbot', 'gaptop']
   efit_type: 'EFIT01'
   include_psirz: False
   include_rhovn: True
-#['density', 'temp']
-  thomson_sig_names: ['temp', 'density']
+  thomson_sig_names: [] #['density', 'temp']
   include_thomson_uncertainty: True
-#['temp','rot']
-  cer_sig_names: ['rot', 'temp']
+  cer_sig_names: [] #['temp','rot']
   cer_type: 'CERQUICK'
-#['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
   cer_realtime_channels: True
-  cer_rotation_units_of_kHz: True
-  zipfit_sig_names: ['trotfit','edensfit','etempfit','itempfit']
+  cer_rotation_units_of_khz: True
+  zipfit_sig_names: ['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
 #['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
 # ['etste', 'etsne','etscr','etsct',
 #                'etstein', 'etsnein','etscrin', 'etsctin','etsinq', 'etsinprs',
 #                'etsteout', 'etsneout', 'etsqout', 'etsprsout',
 #                'etste', 'etsne','etscr','etsct']
   pcs_sig_names: []
-  include_radiation: True
-#65
-  num_x_points: 65
-#['linear_interp_1d','mtanh_1d', 'csaps_1d'] #'linear_interp_1d','spline_1d'] #,'mtanh_1d']
-  trial_fits: ['csaps_1d']
+  include_radiation: False
+  include_full_ech_data: True
+  include_full_nb_data: True
+  include_gas_valve_info: True
+  num_x_points: 33
+  trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
 logistics:
-  output_file: /cscratch/mehtav/data.h5
+  output_file: /cscratch/mehtav/new_data.h5
   overwrite_shots: True
-  debug: False
-  debug_sig_name: 'cer_rot'
   num_processes: 1
-  max_shots_per_run: 400
+  max_shots_per_run: 1000

@@ -12,6 +12,7 @@ def get_last_datapoint():
     all_dataset_shots = set(dataset.keys())
     dataset.close()
     all_dataset_shots.remove('times')
+    all_dataset_shots.remove('spatial_coordinates')
     shot_num_list = sorted([int(key) for key in all_dataset_shots])
     return shot_num_list[-1]
 
