@@ -49,6 +49,7 @@ needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['aot_scalar_sig_names']]
 for efit_type in cfg['data']['efit_types']:
     needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_profile_sig_names']]
     needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_scalar_sig_names'] ]
@@ -73,7 +74,7 @@ if cfg['data']['include_radiation']:
         needed_sigs+=[f'prad{key}']
 if cfg['data']['include_full_ech_data']:
     needed_sigs+=['ech_names','ech_frequency','ech_R','ech_Z',
-                  'ech_pwr','ech_aziang','ech_polang']
+                  'ech_pwr','ech_aziang','ech_polang','ech_pwr_total']
 if cfg['data']['include_full_nb_data']:
     needed_sigs+=['nb_pinj','nb_tinj','nb_vinj','nb_vinj_scalar','nb_210_rtan','nb_150_tilt']
 for trial_fit in cfg['data']['trial_fits']:
@@ -227,7 +228,7 @@ for which_shot,shots in enumerate(subshots):
                              dims=['psi','times'])
             pipeline.fetch('{}_{}_full'.format(sig_name,efit_type),
                            signal)
-    ######## FETCH EFIT PROFILES #############
+        ######## FETCH EFIT PROFILES #############
         for sig_name in cfg['data']['efit_scalar_sig_names'] :
             signal=MdsSignal(r'\{}'.format(sig_name.upper()),
                              efit_type,
@@ -235,6 +236,13 @@ for which_shot,shots in enumerate(subshots):
             pipeline.fetch('{}_{}_full'.format(sig_name,efit_type),
                            signal)
 
+    ######## FETCH AOT SCALARS #############
+    for sig_name in cfg['data']['aot_scalar_sig_names'] :
+        signal=MdsSignal('{}'.format(sig_name.upper()),
+                         'AOT',
+                         location='remote://atlas.gat.com')
+        pipeline.fetch('{}_full'.format(sig_name),
+                       signal)
 
     ######## FETCH PSIRZ (FIRST EFIT ONLY)  #############
     if cfg['data']['include_psirz'] or psirz_needed:
@@ -331,42 +339,59 @@ for which_shot,shots in enumerate(subshots):
         for i in range(1,25):
             for position in ['L','U']:
                 radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.POWER.BOL_{position}{i:02d}_P',
-                                        'SPECTROSCOPY')
+                                        'SPECTROSCOPY',
+                                        location='remote://atlas.gat.com')
                 pipeline.fetch(f'prad{position}{i}_full',radiation_sig)
         for key in ['KAPPA','PRAD_DIVL','PRAD_DIVU','PRAD_TOT']:
             radiation_sig=MdsSignal(f'\\SPECTROSCOPY::TOP.PRAD.BOLOM.PRAD_01.PRAD.{key}',
-                                    'SPECTROSCOPY')
+                                    'SPECTROSCOPY',
+                                    location='remote://atlas.gat.com')
             pipeline.fetch(f'prad{key}_full',radiation_sig)
 
     ######## ECH DETAILED INFO #########
+    # Note, I'd love to include rho as theoretically AOT does automatically
+    # (see https://diii-d.gat.com/d3d-wiki/images/1/12/Autoonetwo_pointnames_by_function_20150518.pdf)
+    # but it seems for older shots the data isn't available...
     if cfg['data']['include_full_ech_data']:
         num_systems=MdsSignal('ECH.NUM_SYSTEMS','RF',dims=())
         pipeline.fetch('ech_num_systems',num_systems)
         for i in range(1,7):
-            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.NAME','RF',dims=())
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.NAME','RF',dims=(),
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_name_{i}',signal)
-            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.FREQUENCY','RF',dims=())
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.GYROTRON.FREQUENCY','RF',dims=(),
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_frequency_{i}',signal)
-            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_R','RF',dims=())
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_R','RF',dims=(),
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_R_{i}',signal)
-            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_Z','RF',dims=())
+            signal=MdsSignal(f'ECH.SYSTEM_{i}.ANTENNA.LAUNCH_Z','RF',dims=(),
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_Z_{i}',signal)
 
         #https://diii-d.gat.com/diii-d/ECHStatus
+        signal=MdsSignal(r'\echpwrc','RF',
+                         location='remote://atlas.gat.com')
+        pipeline.fetch(f'ech_pwr_total_full',signal)
         for gyro in ['LEIA', 'LUKE', 'R2D2', #active
                      'YODA', #starting up
                      'SCARECROW', 'TINMAN', 'CHEWBACCA', #retired
                      'TOTO', 'NATASHA', 'KATYA', #not on website but in tree
                      'LION', 'HAN', 'NASA', 'VADER']: #not operational
-            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}AZIANG','RF')
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}AZIANG','RF',
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_aziang_{gyro}',signal)
-            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}POLANG','RF')
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}POLANG','RF',
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_polang_{gyro}',signal)
-            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}FPWRC','RF')
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}FPWRC','RF',
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_pwr_{gyro}',signal)
-            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}XMFRAC','RF')
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}XMFRAC','RF',
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_xmfrac_{gyro}',signal)
-            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}STAT','RF',dims=())
+            signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}STAT','RF',dims=(),
+                             location='remote://atlas.gat.com')
             pipeline.fetch(f'ech_stat_{gyro}',signal)
 
     ######## NB DETAILED INFO #########
@@ -377,17 +402,23 @@ for which_shot,shots in enumerate(subshots):
                 # PINJ_ is not there for older shots, which is incredibly annoying
                 # DIIID-BEAMS script (see OMFIT-source/modules/DIIID-BEAMS/SCRIPTS/LIB/OMFITlib_utilities)
                 # handles this by taking the scalar value and multiplying by BEAMSTAT
-                signal=MdsSignal(f'NB{beam_name}{location}.PINJ_{beam_name}{location}','NB')
+                signal=MdsSignal(f'NB{beam_name}{location}.PINJ_{beam_name}{location}','NB',
+                                 location='remote://atlas.gat.com')
                 pipeline.fetch(f'nb_{beam}{location}_pinj',signal)
-                signal=MdsSignal(f'NB{beam_name}{location}.TINJ_{beam_name}{location}','NB')
+                signal=MdsSignal(f'NB{beam_name}{location}.TINJ_{beam_name}{location}','NB',
+                                 location='remote://atlas.gat.com')
                 pipeline.fetch(f'nb_{beam}{location}_tinj',signal)
-                signal=MdsSignal(f'NB{beam_name}{location}.VBEAM','NB')
+                signal=MdsSignal(f'NB{beam_name}{location}.VBEAM','NB',
+                                 location='remote://atlas.gat.com')
                 pipeline.fetch(f'nb_{beam}{location}_vinj',signal)
-                signal=MdsSignal(f'NB{beam_name}{location}.NBVAC_SCALAR','NB',dims=())
+                signal=MdsSignal(f'NB{beam_name}{location}.NBVAC_SCALAR','NB',dims=(),
+                                 location='remote://atlas.gat.com')
                 pipeline.fetch(f'nb_{beam}{location}_vinj_scalar',signal)
-        signal=MdsSignal(f'NB15L.OANB.BLPTCH_CAD','NB',dims=())
+        signal=MdsSignal(f'NB15L.OANB.BLPTCH_CAD','NB',dims=(),
+                         location='remote://atlas.gat.com')
         pipeline.fetch(f'nb_150_tilt',signal)
-        signal=MdsSignal(f'NB21L.CCOANB.BLROT','NB',dims=())
+        signal=MdsSignal(f'NB21L.CCOANB.BLROT','NB',dims=(),
+                         location='remote://atlas.gat.com')
         pipeline.fetch(f'nb_210_rtan',signal)
 
     @pipeline.map
@@ -398,6 +429,9 @@ for which_shot,shots in enumerate(subshots):
     if cfg['data']['include_full_ech_data']:
         @pipeline.map
         def add_ech_info(record):
+            record['ech_pwr_total']=standardize_time(record[f'ech_pwr_total_full']['data'],
+                                                     record[f'ech_pwr_total_full']['times'],
+                                                     record['standard_time'])
             num_systems=record['ech_num_systems']['data']
             record['ech_names']=[]
             sigs_0d=['frequency','R','Z']
@@ -645,6 +679,8 @@ for which_shot,shots in enumerate(subshots):
             for sig in record.keys():
                 if sig=='shot' or sig=='errors':
                     continue
+                if sig in final_data[shot]:
+                    del final_data[shot][sig]
                 final_data[shot][sig]=record[sig]
             # for key in record['errors']:
             #     print(key)

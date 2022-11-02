@@ -5,13 +5,14 @@ import numpy as np
 
 # for getting all plasma shots past a certain shot number
 if True:
-    minimum_shot = 120000
+    minimum_shot = 165400
+    maximum_shot=174042
     query = """
         select shot
         from shots_type
-        where shot_type = 'plasma' and shot > {}
+        where shot_type = 'plasma' and shot > {} and shot < {}
         order by shot desc
-        """.format(minimum_shot)
+        """.format(minimum_shot-1,maximum_shot+1)
 # for pulling shots by experiment, e.g. these are high-qmin shots
 else:
     runs=['20191009A', '20190716', '20130510', '20120813', '20120720', '20120720A',
