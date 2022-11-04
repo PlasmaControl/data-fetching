@@ -25,6 +25,7 @@ data:
   efit_scalar_sig_names: ['betap','betan','wmhd','li','q0','q95','qmin','rhoqmin',
                           'li','aminor','kappa','tritop','tribot','volume','drsep',
                           'gapbot','gapin','gapout','gaptop','rmaxis','zmaxis','zxpt1','zxpt2']
+  aot_scalar_sig_names: []
   efit_types: ['EFIT01','EFIT02','EFIT_CAKE01','EFIT_CAKE02']
   include_psirz: False
   include_rhovn: True

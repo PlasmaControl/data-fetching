@@ -2,6 +2,9 @@
 '''
 Requires module purge, then module load toksearch
 Run as python new_database_maker.py configs/quick_test.yaml
+If you ever get an issue related to the D3DRDB.sybase_login
+  try copying this file from your iris home directory to 
+  your saga home directory or vice versa
 
 A few other dependencies for specific fits (ignore
 if you're not fitting cer and thomson yourself):
