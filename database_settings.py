@@ -1,5 +1,10 @@
 import numpy as np
 
+# must be lowercase (does comparison of the lowercased version to this)
+# signal names that are integers, e.g. waveforms in PCS. 
+# code will take mode in the averaging interval rather than mean
+modal_sig_names=['dsifbonoff']
+
 thomson_scale={'density': 1e19, 'temp': 1e3}
 thomson_areas=['CORE','TANGENTIAL']
 

@@ -31,6 +31,18 @@ class Timer(object):
 def standardize_time(old_signal,old_timebase,standard_times,
                      causal=True, window_size=50,
                      exponential_falloff=False, numpy_smoothing_fxn=np.mean, falloff_rate=100):
+    """ Rebase >=1D array signal to a new timebase
+
+    Keyword arguments:
+    old_signal -- the signal you want to rebase
+    old_timebase -- the old_signal's timebase
+    standard_times -- the new (desired) timebase
+    causal -- whether to start the window backwards from the specified time, else window around timepoint
+    window_size -- how large the window
+    exponential_falloff -- whether to count points close to time more heavily (boxcar smoothing if False)
+    numpy_smoothing_fxn -- some function that takes in an array and an array axis along which to apply (e.g. mean, mode, etc)
+    falloff_rate -- (only used if exponential_falloff True) 1/e decay of importance in time
+    """
     new_signal=[]
     for i in range(len(standard_times)):
         if causal:

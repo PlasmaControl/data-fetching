@@ -26,7 +26,7 @@ import pprint
 import sys
 import os
 import time
-from scipy import interpolate
+from scipy import interpolate, stats
 sys.path.append(os.path.join(os.path.dirname(__file__),'lib'))
 from transport_helpers import my_interp, standardize_time, Timer
 import fit_functions
@@ -45,7 +45,7 @@ args = parser.parse_args()
 with open(args.config_filename,"r") as f:
     cfg=yaml.safe_load(f)
 
-from database_settings import pcs_length, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, thomson_areas, thomson_scale
+from database_settings import pcs_length, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, thomson_areas, thomson_scale, modal_sig_names
 
 needed_sigs=[]
 needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
@@ -482,9 +482,15 @@ for which_shot,shots in enumerate(subshots):
         all_sig_names=needed_sigs
         for sig_name in all_sig_names:
             try:
+                numpy_smoothing_fxn=np.mean
+                if sig_name.casefold() in modal_sig_names:
+                    def get_mode(arr, axis=0):
+                        return np.squeeze(stats.mode(a=arr, axis=axis)[0])
+                    numpy_smoothing_fxn=get_mode
                 record[sig_name]=standardize_time(record['{}_full'.format(sig_name)]['data'],
                                                   record['{}_full'.format(sig_name)]['times'],
-                                                  record['standard_time'])
+                                                  record['standard_time'],
+                                                  numpy_smoothing_fxn=numpy_smoothing_fxn)
             except:
                 pass
         for efit_type in cfg['data']['efit_types']:
