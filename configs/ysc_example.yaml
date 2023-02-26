@@ -1,0 +1,58 @@
+data:
+  # shots: data/shots.npy
+  shots: data/arr_0_120021_122759.npy
+  tmin: 0
+  tmax: 12050
+  time_step: 25
+  sql_sig_names: ['t_ip_flat','ip_flat_duration','topology','time_of_shot','run',
+                  'poh','pech','pbeam','btor','btorsign','ip','ipsign', 'betanmax']
+  scalar_sig_names: ['vloop','ip','ipsiptargt','bt',
+                     'gasA','gasB','gasC','gasD','gasE','pfx1','pfx2','uob',
+                     'bmspinj', 'bmstinj',
+                     'bmspinj15l','bmspinj15r','bmspinj21l','bmspinj21r',
+                     'bmspinj30l','bmspinj30r','bmspinj33l','bmspinj33r',
+                     'bmstinj15l','bmstinj15r','bmstinj21l','bmstinj21r',
+                     'bmstinj30l','bmstinj30r','bmstinj33l','bmstinj33r',
+                     'dssdenest','dstdenp','dssdenp','dsiwdens','dsifbonoff','dsitgtsrc',
+                     'C19','C79','C139','C199','C259','C319',
+                     'IU30','IU90','IU150','IU210','IU270','IU330',
+                     'IL30','IL90','IL150','IL210','IL270','IL330',
+                     'n1icwmth','n1tc79off','n1tc139off','n1tc199off',
+                     'n1iiwmth','n1tiu30off','n1tiu90off','n1tiu150off',
+                     'esl019','esl079','esl139','esl199','esl259','esl319']
+  stability_sig_names: ['n1rms','n2rms','n3rms']
+  nb_sig_names: ['pinj','tinj']
+  efit_profile_sig_names: ['qpsi','pres']
+  efit_scalar_sig_names: ['betap','betan','wmhd','li','q0','q95','qmin','rhoqmin',
+                          'li','aminor','kappa','tritop','tribot','volume','drsep',
+                          'gapbot','gapin','gapout','gaptop','rmaxis','zmaxis','zxpt1','zxpt2']
+  aot_scalar_sig_names: []
+  efit_types: ['EFIT01','EFIT02','EFIT_CAKE01','EFIT_CAKE02']
+  include_psirz: False
+  include_rhovn: True
+  thomson_sig_names: [] #['density', 'temp']
+  include_thomson_uncertainty: True
+  cer_sig_names: [] #['temp','rot']
+  cer_type: 'CERQUICK'
+  cer_realtime_channels: True
+  cer_rotation_units_of_khz: True
+  zipfit_sig_names: ['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
+#['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
+# ['etste', 'etsne','etscr','etsct',
+#                'etstein', 'etsnein','etscrin', 'etsctin','etsinq', 'etsinprs',
+#                'etsteout', 'etsneout', 'etsqout', 'etsprsout',
+#                'etste', 'etsne','etscr','etsct']
+  pcs_sig_names: []
+  include_radiation: False
+  include_full_ech_data: True
+  include_full_nb_data: True
+  include_gas_valve_info: True
+  num_x_points: 33
+  trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
+logistics:
+  # output_file: '/mnt/beegfs/users/abbatej/example.h5'
+  # output_file: './example.h5'
+  output_file: './arr_0.h5'
+  overwrite_shots: True
+  num_processes: 1
+  max_shots_per_run: 5000
