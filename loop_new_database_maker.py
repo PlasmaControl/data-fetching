@@ -36,6 +36,7 @@ import yaml
 import argparse
 import h5py
 import datetime # for dealing with getting the datetime from the summaries table
+import tqdm
 
 parser = argparse.ArgumentParser(description='Read tokamak data via toksearch.')
 parser.add_argument('config_filename', type=str,
@@ -700,6 +701,7 @@ for arr_idx in range(1, 18):
         #     needed_sigs.append('{}_raw_1d'.format(cfg['logistics']['debug_sig_name']))
         #     needed_sigs.append('{}_uncertainty_raw_1d'.format(cfg['logistics']['debug_sig_name']))
 
+        print("Starting Timer")
         with Timer():
             if cfg['logistics']['num_processes']>1:
                 records=pipeline.compute_spark(numparts=cfg['logistics']['num_processes'])
@@ -707,7 +709,7 @@ for arr_idx in range(1, 18):
                 records=pipeline.compute_serial()
 
         with h5py.File(filename,'a') as final_data:
-            for record in records:
+            for record in tqdm.tqdm(records):
                 shot=str(record['shot'])
                 final_data.require_group(shot)
                 for sig in record.keys():
