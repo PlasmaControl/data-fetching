@@ -36,7 +36,6 @@ import yaml
 import argparse
 import h5py
 import datetime # for dealing with getting the datetime from the summaries table
-import tqdm
 
 parser = argparse.ArgumentParser(description='Read tokamak data via toksearch.')
 parser.add_argument('config_filename', type=str,
@@ -151,7 +150,7 @@ for arr_idx in range(1, 18):
         subshots.append(all_shots[i*cfg['logistics']['max_shots_per_run']:min((i+1)*cfg['logistics']['max_shots_per_run'],
                                                                                len(all_shots))])
 
-    for which_shot,shots in tqdm.tqdm(enumerate(subshots)):
+    for which_shot,shots in enumerate(subshots):
         print(f'Starting shot {shots[0]}-{shots[-1]}')
         sys.stdout.flush()
 
@@ -183,6 +182,7 @@ for arr_idx in range(1, 18):
                             final_data[shot][sig_name]=str(record[sig])
                         else:
                             final_data[shot][sig_name]=record[sig]
+        print("Done with SQL signals")
 
         # pipeline for GAS
         if cfg['data']['include_gas_valve_info']:
@@ -209,14 +209,17 @@ for arr_idx in range(1, 18):
                     for sig in gas_sigs:
                         sig_name=sig+'_sql'
                         final_data[shot][sig_name]=tmp_dic[shot][sig]
+        print("Done with GAS")
 
         # pipeline for regular signals
         pipeline = Pipeline(shots)
+        print("Done with regular")
 
         ######## FETCH SCALARS #############
         for sig_name in cfg['data']['scalar_sig_names']:
             signal=PtDataSignal(sig_name)
             pipeline.fetch('{}_full'.format(sig_name),signal)
+        print("Done with SCALARS")
 
         ######## FETCH STABILITY #############
         for sig_name in cfg['data']['stability_sig_names']:
@@ -224,6 +227,7 @@ for arr_idx in range(1, 18):
                              'MHD',
                              location='remote://atlas.gat.com')
             pipeline.fetch('{}_full'.format(sig_name),signal)
+        print("Done with STABILITY")
 
         ######## FETCH SCALARS #############
         for sig_name in cfg['data']['nb_sig_names']:
@@ -231,6 +235,7 @@ for arr_idx in range(1, 18):
                              'NB',
                              location='remote://atlas.gat.com')
             pipeline.fetch('{}_full'.format(sig_name),signal)
+        print("Done with nb_sig")
 
         ######## FETCH EFIT PROFILES #############
         for efit_type in cfg['data']['efit_types']:
@@ -248,6 +253,7 @@ for arr_idx in range(1, 18):
                                  location='remote://atlas.gat.com')
                 pipeline.fetch('{}_{}_full'.format(sig_name,efit_type),
                                signal)
+        print("Done with EFIT")
 
         ######## FETCH AOT SCALARS #############
         for sig_name in cfg['data']['aot_scalar_sig_names'] :
@@ -256,6 +262,7 @@ for arr_idx in range(1, 18):
                              location='remote://atlas.gat.com')
             pipeline.fetch('{}_full'.format(sig_name),
                            signal)
+        print("Done with AOT")
 
         ######## FETCH PSIRZ (FIRST EFIT ONLY)  #############
         if cfg['data']['include_psirz'] or psirz_needed:
@@ -272,6 +279,7 @@ for arr_idx in range(1, 18):
                                   cfg['data']['efit_types'][0],
                                   location='remote://atlas.gat.com')
             pipeline.fetch('ssibry_full',ssibry_sig)
+        print("Done with PSIRZ")
 
         ######## FETCH RHOVN (FIRST EFIT ONLY) ###############
         if cfg['data']['include_rhovn'] or len(cfg['data']['zipfit_sig_names'])>0:
@@ -280,6 +288,7 @@ for arr_idx in range(1, 18):
                                   location='remote://atlas.gat.com',
                                   dims=['psi','times'])
             pipeline.fetch('rhovn_full',rhovn_sig)
+        print("Done with RHOVN")
 
         ######## FETCH THOMSON #############
         for sig_name in cfg['data']['thomson_sig_names']:
@@ -294,6 +303,7 @@ for arr_idx in range(1, 18):
                                                   'ELECTRONS',
                                                   location='remote://atlas.gat.com')
                     pipeline.fetch('thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name),thomson_error_sig)
+        print("Done with THOMSON")
 
         ######## FETCH CER     #############
         if len(cfg['data']['cer_sig_names'])>0:
@@ -334,18 +344,20 @@ for arr_idx in range(1, 18):
                                                   'IONS',
                                                   location='remote://atlas.gat.com')
                         pipeline.fetch('cer_{}_{}_{}_error_full'.format(cer_area,sig_name,channel),cer_error_sig)
-
+        print("Done with CER")
 
         ######## FETCH ZIPFIT ##############
         for sig_name in cfg['data']['zipfit_sig_names']:
             zipfit_sig = MdsSignal(r'\ZIPFIT01::TOP.PROFILES.{}'.format(sig_name),'ZIPFIT01',location='remote://atlas.gat.com',dims=['rhon','times'])
             pipeline.fetch('zipfit_{}_full'.format(sig_name),zipfit_sig)
+        print("Done with ZIPFIT")
 
         ######## FETCH OUR PCS ALGO STUFF #############
         for sig_name in cfg['data']['pcs_sig_names']:
             for i in pcs_length[sig_name]:
                 pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
                 pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
+        print("Done with PCS")
 
         ######## FETCH BOLOMETRY STUFF #############
         if cfg['data']['include_radiation']:
@@ -360,6 +372,7 @@ for arr_idx in range(1, 18):
                                         'SPECTROSCOPY',
                                         location='remote://atlas.gat.com')
                 pipeline.fetch(f'prad{key}_full',radiation_sig)
+        print("Done with BOLOMETRY")
 
         ######## ECH DETAILED INFO #########
         # Note, I'd love to include rho as theoretically AOT does automatically
@@ -406,6 +419,7 @@ for arr_idx in range(1, 18):
                 signal=MdsSignal(f'ECH.{gyro}.EC{gyro[:3]}STAT','RF',dims=(),
                                  location='remote://atlas.gat.com')
                 pipeline.fetch(f'ech_stat_{gyro}',signal)
+        print("Done with ECH")
 
         ######## NB DETAILED INFO #########
         if cfg['data']['include_full_nb_data']:
@@ -433,6 +447,7 @@ for arr_idx in range(1, 18):
             signal=MdsSignal(f'NB21L.CCOANB.BLROT','NB',dims=(),
                              location='remote://atlas.gat.com')
             pipeline.fetch(f'nb_210_rtan',signal)
+        print("Done with NB")
 
         @pipeline.map
         def add_timebase(record):
