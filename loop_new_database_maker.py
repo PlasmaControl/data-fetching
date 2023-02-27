@@ -114,6 +114,9 @@ for arr_idx in range(1, 18):
         progress_log = f.readlines()
         progress_log = ''.join(progress_log)
         if data_name in progress_log:
+            print("="*80)
+            print(f"{data_name} already in progress, SKIPPING")
+            print("="*80)
             f.close()
             continue
     with open("fetching_progress.txt", "a") as f:
