@@ -109,8 +109,18 @@ for arr_idx in range(1, 18):
     data_name = f"data_{arr_idx}.h5"
     all_shots = np.load(f"{_SHOT_ARR_DIR}/{arr_name}")
     filename = f"{_SAVE_DATA_DIR}/{data_name}"
+    breakpoint()
+    with open("fetching_progress.txt", "r") as f:
+        progress_log = f.readlines()
+        if data_name in progress_log:
+            f.close()
+            continue
+    with open("fetching_progress.txt", "a") as f:
+        f.write(f"{data_name}\n")
+        f.close()
     all_shots=sorted(all_shots,reverse=True)
 
+    continue
     # psi / rho
     standard_x=np.linspace(0,1,cfg['data']['num_x_points'])
     psirz_needed=(len(cfg['data']['cer_sig_names'])>0 or len(cfg['data']['thomson_sig_names'])>0)
