@@ -121,7 +121,6 @@ for arr_idx in range(1, 18):
         f.close()
     all_shots=sorted(all_shots,reverse=True)
 
-    continue
     # psi / rho
     standard_x=np.linspace(0,1,cfg['data']['num_x_points'])
     psirz_needed=(len(cfg['data']['cer_sig_names'])>0 or len(cfg['data']['thomson_sig_names'])>0)
