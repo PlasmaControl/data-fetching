@@ -112,6 +112,7 @@ for arr_idx in range(1, 18):
     breakpoint()
     with open("fetching_progress.txt", "r") as f:
         progress_log = f.readlines()
+        progress_log = ''.join(progress_log)
         if data_name in progress_log:
             f.close()
             continue
