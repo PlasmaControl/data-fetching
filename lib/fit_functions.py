@@ -5,6 +5,7 @@ import sys
 import os
 from OMFITlib_fit import fit_rbf
 from splines.pcs_fit_helpers import calculate_mhat, spline_eval
+from mtanh_mpfit.mtanh_driver import mtanh_eval
 
 from transport_helpers import my_interp
 
@@ -84,6 +85,21 @@ def pcs_spline_1d(in_x, in_t, value, uncertainty, out_x):
         splined_rot=spline_eval(mPsi,mHat,len(mHat))
         get_rot=my_interp(np.linspace(0,1.2,121),splined_rot,kind='linear')
         final_sig.append(get_rot(out_x))
+
+    final_sig=np.array(final_sig)
+    return final_sig
+
+def pcs_mtanh_1d(in_x, in_t, value, uncertainty, out_x):
+    final_sig=[]
+    for time_ind in range(len(in_t)):
+        import pdb; pdb.set_trace()
+        excluded_inds=np.isnan(value[time_ind,:])
+        y=value[time_ind,~excluded_inds]
+        x=in_x[time_ind,~excluded_inds]
+        err=uncertainty[time_ind,~excluded_inds]
+        (mtanh_psi,mtanh_signal)=mtanh_eval(x,y,err)
+        get_signal=my_interp(mtanh_psi,mtanh_signal,kind='linear')
+        final_sig.append(get_signal(out_x))
 
     final_sig=np.array(final_sig)
     return final_sig

@@ -1,12 +1,14 @@
 import numpy as np
 
 # must be lowercase (does comparison of the lowercased version to this)
-# signal names that are integers, e.g. waveforms in PCS. 
+# signal names that are integers, e.g. waveforms in PCS.
 # code will take mode in the averaging interval rather than mean
 modal_sig_names=['dsifbonoff']
 
-thomson_scale={'density': 1e19, 'temp': 1e3}
-thomson_areas=['CORE','TANGENTIAL']
+thomson_mds_scale={'density': 1e19, 'temp': 1e3}
+thomson_pcs_scale={'density': 1, 'temp': 1}
+thomson_mds_areas=['CORE','TANGENTIAL','DIVERTOR']
+thomson_pcs_areas=['CORE']
 
 cer_scale={'temp': 1e3, 'rot': 1}
 cer_areas=['TANGENTIAL', 'VERTICAL']
@@ -14,7 +16,11 @@ cer_channels_realtime={'TANGENTIAL': np.arange(5,25), #np.arange(1,33); np.arang
                        'VERTICAL': []} #np.arange(1,49); [] for realtime
 cer_channels_all={'TANGENTIAL': np.arange(1,33),
                   'VERTICAL': np.arange(1,49)}
-
+thomson_pcs_max_channels={'CORE': np.arange(50),
+                          'DIVERTOR': [],
+                          'TANGENTIAL': []}
+thomson_pcs_area_mapping={'CORE': 'cor', 'TANGENTIAL': 'tan', 'DIVERTOR': 'div'}
+thomson_pcs_signal_mapping={'density': 'ne', 'temp': 'te'}
 zipfit_pairs={'cer_temp': 'itempfit',
               'cer_rot': 'trotfit',
               'thomson_temp': 'etempfit',
@@ -30,7 +36,9 @@ for sig in ['ftscrot','ftscpsin','ftsc1v1d']:
 for sig in ['ftsspsin','pftssrot','ftsspsin','ftssmhat']:
     pcs_length[sig]=np.arange(1,76)
 for sig in ['ftstemp','ftsterr','ftsdens','ftsnerr','ftspsin','ftsrho']:
-    pcs_length[sig]=np.arange(1,50)
+    pcs_length[sig]=np.arange(1,82)
+for sig in ['ftxfitne','ftxfitte']:
+    pcs_length[sig]=121
 # {'zipfit_trotfit': 'rotation',
 #           'zipfit_itempfit': 'itemp',
 #           'zipfit_etempfit': 'temp',

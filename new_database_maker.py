@@ -3,7 +3,7 @@
 Requires module purge, then module load toksearch
 Run as python new_database_maker.py configs/quick_test.yaml
 If you ever get an issue related to the D3DRDB.sybase_login
-  try copying this file from your iris home directory to 
+  try copying this file from your iris home directory to
   your saga home directory or vice versa
 
 A few other dependencies for specific fits (ignore
@@ -45,7 +45,13 @@ args = parser.parse_args()
 with open(args.config_filename,"r") as f:
     cfg=yaml.safe_load(f)
 
-from database_settings import pcs_length, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, thomson_areas, thomson_scale, modal_sig_names
+from database_settings import pcs_length, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, modal_sig_names, \
+    thomson_pcs_scale, thomson_mds_scale, thomson_pcs_areas, thomson_mds_areas, thomson_pcs_area_mapping, thomson_pcs_signal_mapping, thomson_pcs_max_channels
+
+if cfg['data']['include_rt_thomson']:
+    thomson_areas=thomson_pcs_areas
+else:
+    thomson_areas=thomson_mds_areas
 
 needed_sigs=[]
 needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
@@ -107,13 +113,14 @@ psirz_needed=(len(cfg['data']['cer_sig_names'])>0 or len(cfg['data']['thomson_si
 fit_function_dict={'linear_interp_1d': fit_functions.linear_interp_1d,
                    'spline_1d': fit_functions.spline_1d,
                    'pcs_spline_1d': fit_functions.pcs_spline_1d,
+                   'pcs_mtanh_1d': fit_functions.pcs_mtanh_1d,
                    'nn_interp_2d': fit_functions.nn_interp_2d,
                    'linear_interp_2d': fit_functions.linear_interp_2d,
                    'mtanh_1d': fit_functions.mtanh_1d,
                    'csaps_1d': fit_functions.csaps_1d,
                    'rbf_interp_2d': fit_functions.rbf_interp_2d}
 
-fit_functions_1d=['linear_interp_1d', 'spline_1d', 'pcs_spline_1d', 'mtanh_1d','csaps_1d']
+fit_functions_1d=['linear_interp_1d', 'spline_1d', 'pcs_mtanh_1d', 'pcs_spline_1d', 'mtanh_1d','csaps_1d']
 fit_functions_2d=['nn_interp_2d','linear_interp_2d','rbf_interp_2d']
 
 filename=os.path.expandvars(cfg['logistics']['output_file'])
@@ -284,6 +291,17 @@ for which_shot,shots in enumerate(subshots):
                                               'ELECTRONS',
                                               location='remote://atlas.gat.com')
                 pipeline.fetch('thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name),thomson_error_sig)
+            if cfg['data']['include_rt_thomson']:
+                for channel in thomson_pcs_max_channels[thomson_area]:
+                    thomson_sig = PtDataSignal('tss{}{}{:02d}'.format(thomson_pcs_area_mapping[thomson_area],
+                                                                               thomson_pcs_signal_mapping[sig_name],
+                                                                               channel))
+                    pipeline.fetch(f'thomson_rt_{thomson_area}_{sig_name}_{channel}_full', thomson_sig)
+                    # if cfg['data']['include_thomson_uncertainty']:
+                    #     thomson_sig = PtDataSignal('tss{}{}{:02d}'.format(thomson_pcs_area_mapping[thomson_area],
+                    #                                                                thomson_pcs_signal_mapping[sig_name],
+                    #                                                                channel))
+                    #     pipeline.fetch(f'thomson_rt_{thomson_area}_{sig_name}_{channel}_uncertainty_full', thomson_sig)
 
     ######## FETCH CER     #############
     if len(cfg['data']['cer_sig_names'])>0:
@@ -333,9 +351,13 @@ for which_shot,shots in enumerate(subshots):
 
     ######## FETCH OUR PCS ALGO STUFF #############
     for sig_name in cfg['data']['pcs_sig_names']:
-        for i in pcs_length[sig_name]:
-            pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
-            pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
+        if 'x' in sig_name.lower():
+            pcs_sig=PtDataSignal(sig_name)
+            pipeline.fetch('{}_full'.format(sig_name),pcs_sig)
+        else:
+            for i in pcs_length[sig_name]:
+                pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
+                pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
 
     ######## FETCH BOLOMETRY STUFF #############
     if cfg['data']['include_radiation']:
@@ -569,10 +591,9 @@ for which_shot,shots in enumerate(subshots):
             psi=[]
             uncertainty=[]
             for thomson_area in thomson_areas:
-                for channel in range(len(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'])):
-                    value.append(standardize_time(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['data'][channel],
-                                                  record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['times'],
-                                                  record['standard_time']))
+                num_channels=len(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'])
+                for channel in range(num_channels):
+                    # gather r, z, and psi values: needed whether using thomson or pcs
                     if thomson_area=='TANGENTIAL':
                         r=record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'][channel]
                         z=0
@@ -580,17 +601,33 @@ for which_shot,shots in enumerate(subshots):
                         z=record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'][channel]
                         r=1.94
                     psi.append([r_z_to_psi[time_ind](r,z)[0] for time_ind in range(len(record['standard_time']))])
+                    # really dumb: uncertainties aren't written from the Thomson algo so even if we want PCS thomson signals we need offline uncertainties still
                     if cfg['data']['include_thomson_uncertainty']:
-                        uncertainty.append(standardize_time(record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['data'][channel],
-                                                  record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['times'],
-                                                  record['standard_time']))
+                        uncertainty.append(standardize_time(record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['data'][channel]/thomson_mds_scale[sig_name],
+                                                            record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['times'],
+                                                            record['standard_time']))
+                    if not cfg['data']['include_rt_thomson']:
+                        value.append(standardize_time(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['data'][channel]/thomson_mds_scale[sig_name],
+                                                      record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['times'],
+                                                      record['standard_time']))
+                if cfg['data']['include_rt_thomson']:
+                    for channel in np.arange(num_channels):
+                        value.append(standardize_time(record['thomson_rt_{}_{}_{}_full'.format(thomson_area,sig_name,channel)]['data']/thomson_pcs_scale[sig_name],
+                                                      record['thomson_rt_{}_{}_{}_full'.format(thomson_area,sig_name,channel)]['times'],
+                                                      record['standard_time']))
+                    # here's where we would add the uncertainty
+                    # if cfg['data']['include_thomson_uncertainty']:
+                    #     uncertainty.append(standardize_time(record['thomson_rt_{}_{}_{}_uncertainty_full'.format(thomson_area,sig_name,channel)]['data'],
+                    #                               record['thomson_rt_{}_{}_{}_uncertainty_full'.format(thomson_area,sig_name,channel)]['times'],
+                    #                               record['standard_time']))
 
-            value=np.array(value).T/thomson_scale[sig_name]
+            value=np.array(value).T
             psi=np.array(psi).T
             value[np.isclose(value,0)]=np.nan
             if cfg['data']['include_thomson_uncertainty']:
-                uncertainty=np.array(uncertainty).T/thomson_scale[sig_name]
-                value[np.isclose(uncertainty,0)]=np.nan
+                uncertainty=np.array(uncertainty).T
+                #value[np.isclose(uncertainty,0)]=np.nan
+                uncertainty[np.isclose(uncertainty,0)]=0.1
             else:
                 uncertainty=np.ones(np.shape(value))
             record['thomson_{}_raw_1d'.format(sig_name)]=value
@@ -648,18 +685,24 @@ for which_shot,shots in enumerate(subshots):
     @pipeline.map
     def pcs_processing(record):
         for sig_name in cfg['data']['pcs_sig_names']:
-            record['{}'.format(sig_name)]=[]
-            for i in pcs_length[sig_name]:
-                nonzero_inds=np.nonzero(record['{}{}_full'.format(sig_name,i)]['data'])
-                if 'fts' in sig_name:
-                    record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
-                                                                          record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
-                                                                          record['standard_time'],
-                                                                          numpy_smoothing_fxn=np.max))
-                else:
-                    record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'][nonzero_inds],
-                                                                          record['{}{}_full'.format(sig_name,i)]['times'][nonzero_inds],
-                                                                          record['standard_time']))
+            if 'x' in sig_name.lower():
+                record['{}_full'.format(sig_name)]['data']=record['{}_full'.format(sig_name)]['data'].reshape((-1,pcs_length[sig_name]))
+                num_times=len(record['{}_full'.format(sig_name)]['data'])
+                record['{}'.format(sig_name)]=standardize_time(record['{}_full'.format(sig_name)]['data'],
+                                                               record['{}_full'.format(sig_name)]['times'][:num_times],
+                                                               record['standard_time'])
+            else:
+                record['{}'.format(sig_name)]=[]
+                for i in pcs_length[sig_name]:
+                    #nonzero_inds=np.arange(len(record['{}{}_full'.format(sig_name,i)]['data'])) #np.nonzero(record['{}{}_full'.format(sig_name,i)]['data'])
+                    if 'fts' in sig_name:
+                        record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'], #[nonzero_inds],
+                                                                              record['{}{}_full'.format(sig_name,i)]['times'], #[nonzero_inds],
+                                                                              record['standard_time']))
+                    else:
+                        record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'], #[nonzero_inds],
+                                                                              record['{}{}_full'.format(sig_name,i)]['times'], #[nonzero_inds],
+                                                                              record['standard_time']))
 
     if True: #not cfg['data']['gather_raw']: <-- deprecated (annoying to gather random datatypes into h5)
         # use below to discard unneeded info
@@ -691,6 +734,6 @@ for which_shot,shots in enumerate(subshots):
                 if sig in final_data[shot]:
                     del final_data[shot][sig]
                 final_data[shot][sig]=record[sig]
-            # for key in record['errors']:
-            #     print(key)
-            #     print(record['errors'][key]['traceback'].replace('\\n','\n'))
+            for key in record['errors']:
+                print(key)
+                print(record['errors'][key]['traceback'].replace('\\n','\n'))

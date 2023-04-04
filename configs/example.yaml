@@ -31,6 +31,7 @@ data:
   include_rhovn: True
   thomson_sig_names: [] #['density', 'temp']
   include_thomson_uncertainty: True
+  include_rt_thomson: True
   cer_sig_names: [] #['temp','rot']
   cer_type: 'CERQUICK'
   cer_realtime_channels: True
