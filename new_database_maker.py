@@ -6,6 +6,10 @@ If you ever get an issue related to the D3DRDB.sybase_login
   try copying this file from your iris home directory to
   your saga home directory or vice versa
 
+If you have problems with h5py:
+after doing module load toksearch, manually install h5py with
+pip install h5py==3.6.0
+
 A few other dependencies for specific fits (ignore
 if you're not fitting cer and thomson yourself):
 1) git clone https://github.com/segasai/astrolibpy
