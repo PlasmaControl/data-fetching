@@ -25,7 +25,6 @@ class Timer(object):
 
     def __exit__(self, *args):
         elapsed = time.time() - self.start
-        print('---------------------')
         print('---> Ran in {0:.2f} s'.format(elapsed))
 
 def standardize_time(old_signal,old_timebase,standard_times,

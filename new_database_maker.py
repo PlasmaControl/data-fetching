@@ -31,7 +31,6 @@ import sys
 import os
 import time
 from scipy import interpolate, stats
-sys.path.append(os.path.join(os.path.dirname(__file__),'lib'))
 from transport_helpers import my_interp, standardize_time, Timer
 import fit_functions
 from plot_tools import plot_comparison_over_time, plot_2d_comparison
@@ -156,6 +155,7 @@ for which_shot,shots in enumerate(subshots):
     print(f'Starting shot {shots[0]}-{shots[-1]}')
     sys.stdout.flush()
 
+    print('Writing summary SQL signals')
     # pipeline for SQL signals
     if len(cfg['data']['sql_sig_names'])>0:
         conn = connect_d3drdb()
@@ -185,6 +185,7 @@ for which_shot,shots in enumerate(subshots):
                     else:
                         final_data[shot][sig_name]=record[sig]
 
+    print('Writing gas SQL signals')
     # pipeline for GAS
     if cfg['data']['include_gas_valve_info']:
         gas_sigs=['gas','valve']
@@ -203,7 +204,7 @@ for which_shot,shots in enumerate(subshots):
         for record in records:
             for sig in gas_sigs:
                 shot=str(record['shot'])
-                tmp_dic[shot][sig].append(record[sig])
+                tmp_dic[shot][sig].append(str(record[sig]))
         with h5py.File(filename,'a') as final_data:
             for shot in tmp_dic:
                 final_data.require_group(shot)
@@ -211,6 +212,33 @@ for which_shot,shots in enumerate(subshots):
                     sig_name=sig+'_sql'
                     final_data[shot][sig_name]=tmp_dic[shot][sig]
 
+    print('Writing log SQL signals')
+    # pipeline for LOGS
+    if cfg['data']['include_log_info']:
+        log_sigs=['text','topic','username']
+        conn = connect_d3drdb()
+        query="""SELECT shot,{}
+                 FROM entries
+                 WHERE shot in {}
+              """.format(
+            ','.join(log_sigs),
+            '({})'.format(','.join([str(elem) for elem in shots]))
+            )
+        pipeline = Pipeline.from_sql(conn, query)
+        records=pipeline.compute_serial()
+        tmp_dic={str(shot): {sig: [] for sig in log_sigs} for shot in shots}
+        for record in records:
+            for sig in log_sigs:
+                shot=str(record['shot'])
+                tmp_dic[shot][sig].append(str(record[sig]))
+        with h5py.File(filename,'a') as final_data:
+            for shot in tmp_dic:
+                final_data.require_group(shot)
+                for sig in log_sigs:
+                    sig_name=sig+'_sql'
+                    final_data[shot][sig_name]=tmp_dic[shot][sig]
+
+    print('Writing timebased signals')
     # pipeline for regular signals
     pipeline = Pipeline(shots)
 
@@ -461,21 +489,22 @@ for which_shot,shots in enumerate(subshots):
             record['ech_pwr_total']=standardize_time(record[f'ech_pwr_total_full']['data'],
                                                      record[f'ech_pwr_total_full']['times'],
                                                      record['standard_time'])
-            num_systems=record['ech_num_systems']['data']
-            record['ech_names']=[]
-            sigs_0d=['frequency','R','Z']
-            sigs_1d=['pwr','aziang','polang']
-            for key in sigs_0d+sigs_1d:
-                record[f'ech_{key}']=[]
-            for i in range(1,num_systems+1):
-                gyro=record[f'ech_name_{i}']['data'].upper()
-                record['ech_names'].append(gyro)
-                for key in sigs_0d:
-                    record[f'ech_{key}'].append(record[f'ech_{key}_{i}']['data'])
-                for key in sigs_1d:
-                    record[f'ech_{key}'].append(standardize_time(record[f'ech_{key}_{gyro}']['data'],
-                                                                record[f'ech_{key}_{gyro}']['times'],
-                                                                record['standard_time']))
+            if record['ech_num_systems'] is not None:
+                num_systems=record['ech_num_systems']['data']
+                record['ech_names']=[]
+                sigs_0d=['frequency','R','Z']
+                sigs_1d=['pwr','aziang','polang']
+                for key in sigs_0d+sigs_1d:
+                    record[f'ech_{key}']=[]
+                for i in range(1,num_systems+1):
+                    gyro=record[f'ech_name_{i}']['data'].upper()
+                    record['ech_names'].append(gyro)
+                    for key in sigs_0d:
+                        record[f'ech_{key}'].append(record[f'ech_{key}_{i}']['data'])
+                    for key in sigs_1d:
+                        record[f'ech_{key}'].append(standardize_time(record[f'ech_{key}_{gyro}']['data'],
+                                                                    record[f'ech_{key}_{gyro}']['times'],
+                                                                    record['standard_time']))
 
     if cfg['data']['include_full_nb_data']:
         @pipeline.map
@@ -724,7 +753,7 @@ for which_shot,shots in enumerate(subshots):
 
     with Timer():
         if cfg['logistics']['num_processes']>1:
-            records=pipeline.compute_spark(numparts=cfg['logistics']['num_processes'])
+            records=pipeline.compute_ray(numparts=cfg['logistics']['num_processes'])
         else:
             records=pipeline.compute_serial()
 
@@ -738,6 +767,9 @@ for which_shot,shots in enumerate(subshots):
                 if sig in final_data[shot]:
                     del final_data[shot][sig]
                 final_data[shot][sig]=record[sig]
-            for key in record['errors']:
-                print(key)
-                print(record['errors'][key]['traceback'].replace('\\n','\n'))
+                # print(sig)
+                # print(record[sig])
+            if cfg['logistics']['print_errors']:
+                for key in record['errors']:
+                    print(key)
+                    print(record['errors'][key]['traceback'].replace('\\n','\n'))

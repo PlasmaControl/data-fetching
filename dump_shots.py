@@ -5,8 +5,8 @@ import numpy as np
 
 # for getting all plasma shots past a certain shot number
 if True:
-    minimum_shot = 165400
-    maximum_shot=174042
+    minimum_shot = 140000 #2010-ish
+    maximum_shot = 194528 #200000 #arbitrarily big
     query = """
         select shot
         from shots_type

@@ -2,7 +2,7 @@ data:
   shots: data/shots.npy
   tmin: 0
   tmax: 6000
-  time_step: 25
+  time_step: 20
   sql_sig_names: ['t_ip_flat','ip_flat_duration','topology','time_of_shot','run',
                   'poh','pech','pbeam','btor','btorsign','ip','ipsign', 'betanmax']
   scalar_sig_names: ['vloop','ip','ipsiptargt','bt',
@@ -29,13 +29,13 @@ data:
   efit_types: ['EFIT01','EFIT02','EFIT_CAKE01','EFIT_CAKE02']
   include_psirz: False
   include_rhovn: True
-  thomson_sig_names: [] #['density', 'temp']
+  thomson_sig_names: ['density', 'temp']
   include_thomson_uncertainty: True
   include_rt_thomson: True
-  cer_sig_names: [] #['temp','rot']
+  cer_sig_names: ['temp','rot']
   cer_type: 'CERQUICK'
   cer_realtime_channels: True
-  cer_rotation_units_of_khz: True
+  cer_rotation_units_of_krad: True
   zipfit_sig_names: ['trotfit','edensfit','etempfit','itempfit'] #,'idensfit']
 #['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
 # ['etste', 'etsne','etscr','etsct',
@@ -43,14 +43,16 @@ data:
 #                'etsteout', 'etsneout', 'etsqout', 'etsprsout',
 #                'etste', 'etsne','etscr','etsct']
   pcs_sig_names: []
-  include_radiation: False
+  include_radiation: True
   include_full_ech_data: True
   include_full_nb_data: True
   include_gas_valve_info: True
+  include_log_info: True
   num_x_points: 33
   trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
 logistics:
-  output_file: '/mnt/beegfs/users/abbatej/example.h5'
+  output_file: '/mnt/beegfs/users/abbatej/new_20ms_log_data/example.h5'
   overwrite_shots: True
   num_processes: 1
-  max_shots_per_run: 5000
+  max_shots_per_run: 1
+  print_errors: False
