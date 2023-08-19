@@ -10,8 +10,8 @@ import numpy as np
 import time
 
 filename='/cscratch/abbatej/run_dump.h5'
-min_shot=140000
-max_shot=196512
+min_shot=55102
+max_shot=196645
 overwrite_runs=True
 
 # splitting up into batches prob not necessary in retrospect...
@@ -19,7 +19,7 @@ overwrite_runs=True
 max_shots_per_run=10000
 
 text_sigs=['text','topic','username']
-run_sigs=['brief']
+run_sigs=['brief','miniproposal']
 run_sig_string=','.join(run_sigs)
 text_string=','.join(text_sigs)
 
@@ -56,8 +56,7 @@ for i in range(len(shot_dividers)-1):
         for run in tmp_dic:
             if overwrite_runs and run in f:
                 del f[run]
-            else:
-                f.require_group(run)
-                for sig in tmp_dic[run]:
-                    f[run][sig]=tmp_dic[run][sig]
+            f.require_group(run)
+            for sig in tmp_dic[run]:
+                f[run][sig]=tmp_dic[run][sig]
     print(f'Took {time.time()-prev_time:.2f}s')
