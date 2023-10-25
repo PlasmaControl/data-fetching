@@ -35,5 +35,5 @@ results = pipeline.compute_serial()
 shots=np.array([elem['shot'] for elem in results])
 
 print(f"{len(shots)} shots, within {min(shots)}-{max(shots)}")
-np.save('data/shots.npy',
+np.save('shots.npy',
         shots)

@@ -1,12 +1,12 @@
 data:
-  shots: data/shots.npy
+# run dump_shots.py and put "shots.npy" in shots to do a full database scan, or test with list of shots
+  shots: [163303]
   tmin: 0
   tmax: 6000
   time_step: 20
   sql_sig_names: ['t_ip_flat','ip_flat_duration','topology','time_of_shot','run',
                   'poh','pech','pbeam','btor','btorsign','ip','ipsign', 'betanmax']
   scalar_sig_names: ['vloop','ip','ipsiptargt','bt',
-                     'gasA','gasB','gasC','gasD','gasE','pfx1','pfx2','uob',
                      'bmspinj', 'bmstinj',
                      'bmspinj15l','bmspinj15r','bmspinj21l','bmspinj21r',
                      'bmspinj30l','bmspinj30r','bmspinj33l','bmspinj33r',
@@ -19,6 +19,7 @@ data:
                      'n1icwmth','n1tc79off','n1tc139off','n1tc199off',
                      'n1iiwmth','n1tiu30off','n1tiu90off','n1tiu150off',
                      'esl019','esl079','esl139','esl199','esl259','esl319']
+  gas_cal_sig_names: ['gasA', 'gasB', 'gasC', 'gasD', 'gasE', 'pfx1', 'pfx2', 'pfx3', 'uob']
   stability_sig_names: ['n1rms','n2rms','n3rms']
   nb_sig_names: ['pinj','tinj']
   efit_profile_sig_names: ['qpsi','pres']
@@ -47,11 +48,13 @@ data:
   include_full_ech_data: True
   include_full_nb_data: True
   include_gas_valve_info: True
+# the below requires gas_valve_info true, and gas_cal_sig_names nonempty
+  combined_gas_types: ['D_tot', 'N_tot', 'H_tot', 'He_tot', 'Ne_tot', 'Ar_tot']
   include_log_info: True
   num_x_points: 33
   trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
 logistics:
-  output_file: '/mnt/beegfs/users/abbatej/new_20ms_log_data/example.h5'
+  output_file: 'example.h5'
   overwrite_shots: True
   num_processes: 1
   max_shots_per_run: 1

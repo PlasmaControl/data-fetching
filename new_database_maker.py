@@ -60,6 +60,7 @@ needed_sigs=[]
 needed_sigs+=[sig_name for sig_name in cfg['data']['scalar_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['nb_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['gas_cal_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['aot_scalar_sig_names']]
 for efit_type in cfg['data']['efit_types']:
@@ -284,6 +285,13 @@ for which_shot,shots in enumerate(subshots):
                          'AOT',
                          location='remote://atlas.gat.com')
         pipeline.fetch('{}_full'.format(sig_name),
+                       signal)
+
+    ######## FETCH CALIBRATED GAS ############
+    for sig_name in cfg['data']['gas_cal_sig_names'] :
+        signal=MdsSignal(f'.GASFLOW.{sig_name}.FLOW',
+                         'NEUTRALS')
+        pipeline.fetch(f'{sig_name}_full',
                        signal)
 
     ######## FETCH PSIRZ (FIRST EFIT ONLY)  #############
@@ -753,6 +761,7 @@ for which_shot,shots in enumerate(subshots):
 
     with Timer():
         if cfg['logistics']['num_processes']>1:
+            # note use compute_spark for Iris, compute_ray for saga
             records=pipeline.compute_ray(numparts=cfg['logistics']['num_processes'])
         else:
             records=pipeline.compute_serial()
@@ -769,6 +778,31 @@ for which_shot,shots in enumerate(subshots):
                 final_data[shot][sig]=record[sig]
                 # print(sig)
                 # print(record[sig])
+            # DIII-D stores gas data by valve (gasA, gasB, ... pfx1,...)
+            # ASDEX stores as gas type (total, from all valves, for each type of gas)
+            # combining all valves for each type of gas is a decent approximation
+            if len(cfg['data']['combined_gas_types'])>0 \
+                    and cfg['data']['include_gas_valve_info'] \
+                    and len(cfg['data']['gas_cal_sig_names'])>0:
+                # full list of unique valves and gases below
+                # {'LOB1', 'PFX2', 'A', 'B', 'PFX1', 'C', 'DRDP', 'LOB2', 'D', 'UOB', 'E', 'CPGAS', 'PFX3'}
+                # {'XE', 'He   ', 'CH4', '13CD4', 'D2', 'Xe', 'None ', 'D2   ', 'Ne', 'KR', '5-Xe_95-D2', 'None', 'H2   ', 'Ne   ', 'Tokamakium', 'Ar   ', ' ', 'AR/N2', 'Ar', 'NE', 'He', 'N2', 'He3', 'HE', 'AR', '10-Kr_90-D2', 'H2', 'CH4  '}
+                # could use regex if necessary, instead just strip and upper ( print(re.search(r'^D2?$', 'D2')) )
+                valve_mapping={'gasA': 'A', 'gasB': 'B', 'gasC': 'C', 'gasD': 'D', 'gasE': 'E',
+                               'pfx1': 'PFX1', 'pfx2': 'PFX2', 'pfx3': 'PFX3', 'uob': 'UOB'}
+                gas_mapping={'D2': 'D_tot', 'N2': 'N_tot', 'H2': 'H_tot',
+                             'HE': 'He_tot', 'NE': 'Ne_tot', 'AR': 'Ar_tot'}
+                valves=[valve.decode('utf-8') for valve in final_data[shot]['valve_sql'][:]]
+                gases=[gas.decode('utf-8') for gas in final_data[shot]['gas_sql'][:]]
+                for gas in cfg['data']['combined_gas_types']:
+                    final_data[shot][gas]=np.zeros(len(standard_times))
+                for valve in valve_mapping:
+                    if valve in final_data[shot].keys() and valve_mapping[valve] in valves:
+                        ind=valves.index(valve_mapping[valve])
+                        gas=gases[ind]
+                        mapped_gas=gas_mapping[gas.strip().upper()]
+                        if mapped_gas in cfg['data']['combined_gas_types']:
+                            final_data[shot][mapped_gas][:]+=final_data[shot][valve][:]
             if cfg['logistics']['print_errors']:
                 for key in record['errors']:
                     print(key)
