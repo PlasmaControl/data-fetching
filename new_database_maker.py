@@ -799,10 +799,11 @@ for which_shot,shots in enumerate(subshots):
                 for valve in valve_mapping:
                     if valve in final_data[shot].keys() and valve_mapping[valve] in valves:
                         ind=valves.index(valve_mapping[valve])
-                        gas=gases[ind]
-                        mapped_gas=gas_mapping[gas.strip().upper()]
-                        if mapped_gas in cfg['data']['combined_gas_types']:
-                            final_data[shot][mapped_gas][:]+=final_data[shot][valve][:]
+                        gas=gases[ind].strip().upper()
+                        if gas in gas_mapping:
+                            mapped_gas=gas_mapping[gas.strip().upper()]
+                            if mapped_gas in cfg['data']['combined_gas_types']:
+                                final_data[shot][mapped_gas][:]+=final_data[shot][valve][:]
             if cfg['logistics']['print_errors']:
                 for key in record['errors']:
                     print(key)
