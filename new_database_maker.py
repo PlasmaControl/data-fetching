@@ -239,7 +239,7 @@ for which_shot,shots in enumerate(subshots):
                     sig_name=sig+'_sql'
                     final_data[shot][sig_name]=tmp_dic[shot][sig]
 
-    print('Writing timebased signals')
+    print('Gathering timebased signals')
     # pipeline for regular signals
     pipeline = Pipeline(shots)
 
@@ -766,6 +766,7 @@ for which_shot,shots in enumerate(subshots):
         else:
             records=pipeline.compute_serial()
 
+    print('Writing timebased signals')
     with h5py.File(filename,'a') as final_data:
         for record in records:
             shot=str(record['shot'])
