@@ -8,15 +8,18 @@
 import h5py
 
 filenames=['big.h5', 'small.h5']
-overwrite_signals=False
+overwrite_signals=True
 
-with h5py.File('combined_data.h5', 'w') as combined_file:
+special_sigs=['times', 'spatial_coordinates']
+with h5py.File('combined_data.h5', 'a') as combined_file:
     for filename in filenames:
         print(f'Starting {filename}')
         with h5py.File(filename, 'r') as individ_file:
             shots=list(individ_file.keys())
-            shots.remove('spatial_coordinates')
-            shots.remove('times')
+            for sig in special_sigs:
+                shots.remove(sig)
+                if sig not in combined_file:
+                    combined_file[sig]=individ_file[sig][()]
             for shot in shots:
                 if shot not in combined_file:
                     bytes_shot=bytes(shot, 'utf-8')
