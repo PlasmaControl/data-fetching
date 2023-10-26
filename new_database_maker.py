@@ -20,6 +20,11 @@ if you're not fitting cer and thomson yourself):
    this is to make libspline.o, called by pcs_fit_helpers.py
    which is in turn called by pcs_spline_1d (pcs spline for
    rotation)
+
+Also at the moment (10/26/23) you can't combine gas info
+(combined_gas_types must be empty in config) when running on saga
+cluster, though it does work for Iris. Talk to Brian Sammuli if
+this is still an issue
 '''
 
 from toksearch import PtDataSignal, MdsSignal, Pipeline

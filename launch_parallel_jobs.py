@@ -11,7 +11,6 @@ minimum_shot=140000
 maximum_shot=194248
 slurm_dir='slurm_stuff'
 baseconfig_filename='configs/gas.yaml'
-basename='gas'
 
 shot_separators=np.linspace(minimum_shot, maximum_shot, nprocesses+1).astype(int)
 
