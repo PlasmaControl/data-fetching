@@ -20,5 +20,3 @@ When the config file is ready, run
 `python new_database_maker.py path_to_config`
 
 For large runs, use `launch_parallel_jobs.py` which manually dumps shots and splits into cases to run in parallel (toksearch theoretically can do this under the hood but in my experience it doesn't speed stuff up and is not robust). You can modify `combine_shots.py` to combine the h5 files it dumps into one. 
-
-If you have issues with h5py, u
