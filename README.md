@@ -2,7 +2,11 @@ To run on iris:
 
 `module load toksearch`
 
-mkdir data before anything, to make a spot for the numpy array of shots that you want to load signals for. Then in dump_shots.py edit the min_shots and max_shots to be whatever range you want, for testing use e.g. 163300 to 163310. Then run it to dump the shots you want to collect (but only those with plasma; and you can also edit to only take from certain run days in the file) via
+and pip install h5py==3.6.0 the first time you run.
+
+For the basic case: 
+
+In dump_shots.py edit the min_shots and max_shots to be whatever range you want, for testing use e.g. 163300 to 163310. Then run it to dump the shots you want to collect (but only those with plasma; and you can also edit to only take from certain run days in the file) via
 
 `python dump_shots.py`
 
@@ -14,3 +18,7 @@ Increase max_shots_per_run, this controls how often it checkpoints and spits out
 When the config file is ready, run
 
 `python new_database_maker.py path_to_config`
+
+For large runs, use `launch_parallel_jobs.py` which manually dumps shots and splits into cases to run in parallel (toksearch theoretically can do this under the hood but in my experience it doesn't speed stuff up and is not robust). You can modify `combine_shots.py` to combine the h5 files it dumps into one. 
+
+If you have issues with h5py, u
