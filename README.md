@@ -1,8 +1,8 @@
-To run on iris:
+To run on iris and saga (General Atomics clusters):
 
 `module load toksearch`
 
-and pip install h5py==3.6.0 the first time you run.
+and, the first time you run, after you module load toksearch also pip install `h5py==3.6.0`. Shouldn't be necessary, but if you have further difficulties consider things like `module load defaults`, `module load gcc7`, `module load hdf5/gnu`
 
 For the basic case: 
 
@@ -20,3 +20,5 @@ When the config file is ready, run
 `python new_database_maker.py path_to_config`
 
 For large runs, use `launch_parallel_jobs.py` which manually dumps shots and splits into cases to run in parallel (toksearch theoretically can do this under the hood but in my experience it doesn't speed stuff up and is not robust). You can modify `combine_shots.py` to combine the h5 files it dumps into one. 
+
+As side notes, omfit_run_dump.py can be used for grabbing text data, which is an OMFIT script (see top of file for how to use)
