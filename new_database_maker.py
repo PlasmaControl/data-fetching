@@ -637,6 +637,8 @@ for which_shot,shots in enumerate(subshots):
             psi=[]
             uncertainty=[]
             for thomson_area in thomson_areas:
+                if record['thomson_{}_{}_full'.format(thomson_area,sig_name)]==None:
+                    continue
                 num_channels=len(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['position'])
                 for channel in range(num_channels):
                     # gather r, z, and psi values: needed whether using thomson or pcs
@@ -652,14 +654,8 @@ for which_shot,shots in enumerate(subshots):
                         uncertainty.append(standardize_time(record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['data'][channel]/thomson_mds_scale[sig_name],
                                                             record['thomson_{}_{}_uncertainty_full'.format(thomson_area,sig_name)]['times'],
                                                             record['standard_time']))
-                    if not cfg['data']['include_rt_thomson']:
-                        value.append(standardize_time(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['data'][channel]/thomson_mds_scale[sig_name],
+                    value.append(standardize_time(record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['data'][channel]/thomson_mds_scale[sig_name],
                                                       record['thomson_{}_{}_full'.format(thomson_area,sig_name)]['times'],
-                                                      record['standard_time']))
-                if cfg['data']['include_rt_thomson']:
-                    for channel in np.arange(num_channels):
-                        value.append(standardize_time(record['thomson_rt_{}_{}_{}_full'.format(thomson_area,sig_name,channel)]['data']/thomson_pcs_scale[sig_name],
-                                                      record['thomson_rt_{}_{}_{}_full'.format(thomson_area,sig_name,channel)]['times'],
                                                       record['standard_time']))
                     # here's where we would add the uncertainty
                     # if cfg['data']['include_thomson_uncertainty']:
