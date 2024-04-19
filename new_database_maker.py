@@ -13,10 +13,9 @@ pip install h5py==3.6.0
 A few other dependencies for specific fits (ignore
 if you're not fitting cer and thomson yourself):
 1) git clone https://github.com/segasai/astrolibpy
-   into the lib/ dir (this is for mtanh fits for temperature)
-3) pip install csaps
+2) pip install csaps
    this is for smoothing spline fits for rotation
-3) cd to lib/splines/, module load gcc-9.2.0, and type "make"
+3) cd to splines/, module load gcc-9.2.0, and type "make"
    this is to make libspline.o, called by pcs_fit_helpers.py
    which is in turn called by pcs_spline_1d (pcs spline for
    rotation)
