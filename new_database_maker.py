@@ -151,7 +151,7 @@ if cfg['logistics']['overwrite_shots']:
                 del final_data[str(shot)]
 
 subshots=[]
-num_files=int(len(all_shots)/(cfg['logistics']['max_shots_per_run']+1)) + 1
+num_files=int(len(all_shots)/(cfg['logistics']['max_shots_per_run'])) + 1
 for i in range(num_files):
     subshots.append(all_shots[i*cfg['logistics']['max_shots_per_run']:min((i+1)*cfg['logistics']['max_shots_per_run'],
                                                                            len(all_shots))])
