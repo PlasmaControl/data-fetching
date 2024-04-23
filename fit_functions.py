@@ -3,7 +3,7 @@ from scipy import interpolate
 
 import sys
 import os
-from OMFITlib_fit import fit_rbf
+# from OMFITlib_fit import fit_rbf
 from splines.pcs_fit_helpers import calculate_mhat, spline_eval
 from mtanh_mpfit.mtanh_driver import mtanh_eval
 
@@ -161,8 +161,8 @@ def linear_interp_2d(in_x, in_t, value, uncertainty, out_x, out_t):
     
     return final_sig
 
-def rbf_interp_2d_new(in_x, in_t, value, uncertainty, out_x, out_t, debug=False):
-    return fit_rbf(in_x, in_t, value, uncertainty, out_x, out_t)
+# def rbf_interp_2d_new(in_x, in_t, value, uncertainty, out_x, out_t, debug=False):
+    # return fit_rbf(in_x, in_t, value, uncertainty, out_x, out_t)
 
 
 def rbf_interp_2d(in_x, in_t, value, uncertainty, out_x, out_t, debug=False):
