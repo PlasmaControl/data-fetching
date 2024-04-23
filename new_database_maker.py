@@ -37,7 +37,6 @@ import time
 from scipy import interpolate, stats
 from transport_helpers import my_interp, standardize_time, Timer
 import fit_functions
-from plot_tools import plot_comparison_over_time, plot_2d_comparison
 import matplotlib.pyplot as plt
 import yaml
 import argparse
