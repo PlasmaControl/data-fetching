@@ -148,7 +148,7 @@ if cfg['logistics']['overwrite_shots']:
         for shot in all_shots:
             if str(shot) in final_data:
                 del final_data[str(shot)]
-
+print(str(len(all_shots))+' shots')
 subshots=[]
 num_files=int(len(all_shots)/(cfg['logistics']['max_shots_per_run']))
 
@@ -324,7 +324,6 @@ for which_shot,shots in enumerate(subshots):
                               location='remote://atlas.gat.com',
                               dims=['psi','times'])
         pipeline.fetch('rhovn_full',rhovn_sig)
-
     ######## FETCH THOMSON #############
     for sig_name in cfg['data']['thomson_sig_names']:
         for thomson_area in thomson_areas:
@@ -680,7 +679,7 @@ for which_shot,shots in enumerate(subshots):
             for trial_fit in cfg['data']['trial_fits']:
                 if trial_fit in fit_functions_1d:
                     record['thomson_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
-
+            print('grabbed thomson')
     @pipeline.map
     def map_cer_1d(record):
         # an rz interpolator for each standard time
@@ -772,6 +771,7 @@ for which_shot,shots in enumerate(subshots):
     print('Writing timebased signals')
     with h5py.File(filename,'a') as final_data:
         for record in records:
+            print('Keys grabbed: 'record.keys())
             shot=str(record['shot'])
             final_data.require_group(shot)
             for sig in record.keys():
