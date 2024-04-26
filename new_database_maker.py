@@ -679,7 +679,6 @@ for which_shot,shots in enumerate(subshots):
             for trial_fit in cfg['data']['trial_fits']:
                 if trial_fit in fit_functions_1d:
                     record['thomson_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
-            print('grabbed thomson')
     @pipeline.map
     def map_cer_1d(record):
         # an rz interpolator for each standard time
@@ -771,7 +770,7 @@ for which_shot,shots in enumerate(subshots):
     print('Writing timebased signals')
     with h5py.File(filename,'a') as final_data:
         for record in records:
-            print('Keys grabbed: 'record.keys())
+            print('Keys grabbed: '+ str(record.keys()))
             shot=str(record['shot'])
             final_data.require_group(shot)
             for sig in record.keys():
