@@ -66,6 +66,9 @@ needed_sigs+=[sig_name for sig_name in cfg['data']['stability_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['gas_cal_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['pcs_sig_names']]
 needed_sigs+=[sig_name for sig_name in cfg['data']['aot_scalar_sig_names']]
+needed_sigs+=[sig_name for sig_name in cfg['data']['aot_prof_sig_names']]
+if len(cfg['data']['aot_prof_sig_names']) > 0:
+    needed_sigs+=['aot_prof_rho']
 for efit_type in cfg['data']['efit_types']:
     needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_profile_sig_names']]
     needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_scalar_sig_names'] ]
@@ -288,6 +291,14 @@ for which_shot,shots in enumerate(subshots):
 
     ######## FETCH AOT SCALARS #############
     for sig_name in cfg['data']['aot_scalar_sig_names'] :
+        signal=MdsSignal('{}'.format(sig_name.upper()),
+                         'AOT',
+                         location='remote://atlas.gat.com')
+        pipeline.fetch('{}_full'.format(sig_name),
+                       signal)
+
+    ######## FETCH AOT PROFILES ###########
+    for sig_name in cfg['data']['aot_prof_sig_names']:
         signal=MdsSignal('{}'.format(sig_name.upper()),
                          'AOT',
                          location='remote://atlas.gat.com')
@@ -745,6 +756,24 @@ for which_shot,shots in enumerate(subshots):
                         record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'], #[nonzero_inds],
                                                                               record['{}{}_full'.format(sig_name,i)]['times'], #[nonzero_inds],
                                                                               record['standard_time']))
+    
+    if len(cfg['data']['aot_prof_sig_names']) > 0:
+        @pipeline.map
+        def add_aot_profs(record):
+            for sig_name in cfg['data']['aot_prof_sig_names']:
+                if record[f'{sig_name}_full'] is None:
+                    continue
+                # Appears to work fine even though standize_time() is supposed to only be for 1d signals
+                # Dim of EC signals is (space, time) so transpose to flip to make time first dim as input to standardize_time()
+                # However it seems standardize_time() flips dims again so flip again after to get back to (time, space)
+                record[sig_name] = standardize_time(record[f'{sig_name}_full']['data'].T,
+                                                    record[f'{sig_name}_full']['times'],
+                                                    record['standard_time'],
+                                                    window_size=200,
+                                                    exponential_falloff=True,
+                                                    falloff_rate=20).T
+            record['aot_prof_rho'] = np.linspace(0,1,201)
+
 
     if True: #not cfg['data']['gather_raw']: <-- deprecated (annoying to gather random datatypes into h5)
         # use below to discard unneeded info
