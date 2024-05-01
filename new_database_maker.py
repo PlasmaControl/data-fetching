@@ -803,7 +803,18 @@ for which_shot,shots in enumerate(subshots):
             records=pipeline.compute_ray(numparts=cfg['logistics']['num_processes'])
         else:
             records=pipeline.compute_serial()
-
+    # check if MDSplus has crashed. If so, close current run and rerun launch ensemble from next shot
+    break_condition = False
+    for record in records:
+        error_check = [key for key in record['errors'].keys() if 'Failure to complete operation' in record['errors'][key]['traceback']]
+        if len(error_check)>0:
+            print('MDSplus has crashed at shot ' + str(shots[0]) + ', rerunning the script...')
+            from launch_parallel_jobs_function import submit_single_run
+            submit_single_run(args.config_filename, min(all_shots), shots[0]-1)
+            break_condition = True
+            break
+    if break_condition:
+        break
     print('Writing timebased signals')
     with h5py.File(filename,'a') as final_data:
         for record in records:
