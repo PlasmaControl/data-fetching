@@ -639,6 +639,10 @@ for which_shot,shots in enumerate(subshots):
 
     @pipeline.map
     def map_thomson_1d(record):
+        # Don't run if we don't want any thomson signals
+        if len(cfg['data']['thomson_sig_names']) == 0:
+            return
+
         # an rz interpolator for each standard time
         r_z_to_psi=[interpolate.interp2d(record['psirz_r'],
                                          record['psirz_z'],
@@ -692,6 +696,10 @@ for which_shot,shots in enumerate(subshots):
                     record['thomson_{}_{}'.format(sig_name,trial_fit)] = fit_function_dict[trial_fit](psi,record['standard_time'],value,uncertainty,standard_x)
     @pipeline.map
     def map_cer_1d(record):
+        # Don't run if we don't want any CER signals
+        if len(cfg['data']['cer_sig_names']) == 0:
+            return
+
         # an rz interpolator for each standard time
         r_z_to_psi=[interpolate.interp2d(record['psirz_r'],
                                          record['psirz_z'],
