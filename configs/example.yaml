@@ -58,5 +58,5 @@ logistics:
   output_file: 'example.h5'
   overwrite_shots: True
   num_processes: 1
-  max_shots_per_run: 1
+  max_shots_per_run: 1 # Bug: needs to be 1 to save data in parallel jobs
   print_errors: False
