@@ -741,24 +741,10 @@ for which_shot,shots in enumerate(subshots):
     @pipeline.map
     def pcs_processing(record):
         for sig_name in cfg['data']['pcs_sig_names']:
-            if 'x' in sig_name.lower():
-                record['{}_full'.format(sig_name)]['data']=record['{}_full'.format(sig_name)]['data'].reshape((-1,pcs_length[sig_name]))
-                num_times=len(record['{}_full'.format(sig_name)]['data'])
-                record['{}'.format(sig_name)]=standardize_time(record['{}_full'.format(sig_name)]['data'],
-                                                               record['{}_full'.format(sig_name)]['times'][:num_times],
-                                                               record['standard_time'])
-            else:
-                record['{}'.format(sig_name)]=[]
-                for i in pcs_length[sig_name]:
-                    #nonzero_inds=np.arange(len(record['{}{}_full'.format(sig_name,i)]['data'])) #np.nonzero(record['{}{}_full'.format(sig_name,i)]['data'])
-                    if 'fts' in sig_name:
-                        record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'], #[nonzero_inds],
-                                                                              record['{}{}_full'.format(sig_name,i)]['times'], #[nonzero_inds],
-                                                                              record['standard_time']))
-                    else:
-                        record['{}'.format(sig_name)].append(standardize_time(record['{}{}_full'.format(sig_name,i)]['data'], #[nonzero_inds],
-                                                                              record['{}{}_full'.format(sig_name,i)]['times'], #[nonzero_inds],
-                                                                              record['standard_time']))
+            record['{}'.format(sig_name)]=standardize_time(record['{}_full'.format(sig_name)]['data'],
+                                                           record['{}_full'.format(sig_name)]['times'][:],
+                                                           record['standard_time'])
+
     
     if len(cfg['data']['aot_prof_sig_names']) > 0:
         @pipeline.map
