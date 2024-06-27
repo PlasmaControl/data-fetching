@@ -408,14 +408,9 @@ for which_shot,shots in enumerate(subshots):
 
     ######## FETCH OUR PCS ALGO STUFF #############
     for sig_name in cfg['data']['pcs_sig_names']:
-        if 'x' in sig_name.lower():
-            pcs_sig=PtDataSignal(sig_name)
-            pipeline.fetch('{}_full'.format(sig_name),pcs_sig)
-        else:
-            for i in pcs_length[sig_name]:
-                pcs_sig = PtDataSignal('{}{}'.format(sig_name,i))
-                pipeline.fetch('{}{}_full'.format(sig_name,i),pcs_sig)
-
+       pcs_sig=PtDataSignal(sig_name)
+       pipeline.fetch('{}_full'.format(sig_name),pcs_sig)
+       
     ######## FETCH BOLOMETRY STUFF #############
     if cfg['data']['include_radiation']:
         for i in range(1,25):
@@ -810,7 +805,7 @@ for which_shot,shots in enumerate(subshots):
         if len(error_check)>0:
             print('MDSplus has crashed at shot ' + str(shots[0]) + ', rerunning the script...')
             from launch_parallel_jobs_function import submit_single_run
-            submit_single_run(args.config_filename, min(all_shots), shots[0]-1)
+            submit_single_run(args.config_filename, min(all_shots), shots[0]-1,  )
             break_condition = True
             break
     if break_condition:
