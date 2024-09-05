@@ -71,6 +71,7 @@ if len(cfg['data']['aot_prof_sig_names']) > 0:
     needed_sigs+=['aot_prof_rho']
 for efit_type in cfg['data']['efit_types']:
     needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_profile_sig_names']]
+    needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_matrix_sig_names']]
     needed_sigs+=[f'{sig_name}_{efit_type}' for sig_name in cfg['data']['efit_scalar_sig_names'] ]
 if cfg['data']['include_psirz']:
     needed_sigs+=['psirz','psirz_r','psirz_z']
@@ -272,8 +273,9 @@ for which_shot,shots in enumerate(subshots):
                          location='remote://atlas.gat.com')
         pipeline.fetch('{}_full'.format(sig_name),signal)
 
-    ######## FETCH EFIT PROFILES #############
+    ######## FETCH EFIT VALUES #############
     for efit_type in cfg['data']['efit_types']:
+        ######## FETCH EFIT PROFILES #############
         for sig_name in cfg['data']['efit_profile_sig_names']:
             signal=MdsSignal('RESULTS.GEQDSK.{}'.format(sig_name),
                              efit_type,
@@ -281,7 +283,15 @@ for which_shot,shots in enumerate(subshots):
                              dims=['psi','times'])
             pipeline.fetch('{}_{}_full'.format(sig_name,efit_type),
                            signal)
-        ######## FETCH EFIT PROFILES #############
+        ######## FETCH EFIT MATRICES #############
+        for sig_name in cfg['data']['efit_matrix_sig_names']:
+            signal=MdsSignal('RESULTS.GEQDSK.{}'.format(sig_name),
+                             efit_type,
+                             location='remote://atlas.gat.com',
+                             dims=['psi','times'])
+            pipeline.fetch('{}_{}_full'.format(sig_name,efit_type),
+                           signal)
+        ######## FETCH EFIT SCALARS #############
         for sig_name in cfg['data']['efit_scalar_sig_names'] :
             signal=MdsSignal(r'\{}'.format(sig_name.upper()),
                              efit_type,
