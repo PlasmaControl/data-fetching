@@ -23,7 +23,6 @@ data:
   stability_sig_names: ['n1rms','n2rms','n3rms']
   nb_sig_names: ['pinj','tinj']
   efit_profile_sig_names: ['qpsi','pres']
-  efit_matrix_sig_names: ['nbdry', 'bdry']
   efit_scalar_sig_names: ['betap','betan','wmhd','li','q0','q95','qmin','rhoqmin',
                           'li','aminor','kappa','tritop','tribot','volume','drsep',
                           'gapbot','gapin','gapout','gaptop','rmaxis','zmaxis','zxpt1','zxpt2']
