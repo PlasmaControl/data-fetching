@@ -26,22 +26,23 @@ cluster, though it does work for Iris. Talk to Brian Sammuli if
 this is still an issue
 '''
 
-from toksearch import PtDataSignal, MdsSignal, Pipeline
-from toksearch.sql.mssql import connect_d3drdb
-import numpy as np
+import argparse
 import collections
+import datetime  # for dealing with getting the datetime from the summaries table
+import os
 import pprint
 import sys
-import os
 import time
-from scipy import interpolate, stats
-from transport_helpers import my_interp, standardize_time, Timer
+
 import fit_functions
-import matplotlib.pyplot as plt
-import yaml
-import argparse
 import h5py
-import datetime # for dealing with getting the datetime from the summaries table
+import matplotlib.pyplot as plt
+import numpy as np
+import yaml
+from scipy import interpolate, stats
+from toksearch import MdsSignal, Pipeline, PtDataSignal
+from toksearch.sql.mssql import connect_d3drdb
+from transport_helpers import Timer, my_interp, standardize_time
 
 parser = argparse.ArgumentParser(description='Read tokamak data via toksearch.')
 parser.add_argument('config_filename', type=str,
@@ -51,8 +52,13 @@ args = parser.parse_args()
 with open(args.config_filename,"r") as f:
     cfg=yaml.safe_load(f)
 
-from database_settings import pcs_length, zipfit_pairs, cer_scale, cer_areas, cer_channels_realtime, cer_channels_all, modal_sig_names, \
-    thomson_pcs_scale, thomson_mds_scale, thomson_pcs_areas, thomson_mds_areas, thomson_pcs_area_mapping, thomson_pcs_signal_mapping, thomson_pcs_max_channels
+from database_settings import (cer_areas, cer_channels_all,
+                               cer_channels_realtime, cer_scale,
+                               modal_sig_names, pcs_length, thomson_mds_areas,
+                               thomson_mds_scale, thomson_pcs_area_mapping,
+                               thomson_pcs_areas, thomson_pcs_max_channels,
+                               thomson_pcs_scale, thomson_pcs_signal_mapping,
+                               zipfit_pairs)
 
 if cfg['data']['include_rt_thomson']:
     thomson_areas=thomson_pcs_areas

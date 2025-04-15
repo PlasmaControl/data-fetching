@@ -1,0 +1,48 @@
+data:
+# run dump_shots.py and put "shots.npy" in shots to do a full database scan, or test with list of shots
+  shots: [200721, 200722, 200723, 200724, 200725, 200726]
+  tmin: 0
+  tmax: 6000
+  time_step: 0.00125
+  sql_sig_names: ['t_ip_flat','ip_flat_duration']
+  scalar_sig_names: ['denr0_uf_1','denv1_uf','denv2_uf','denv3_uf', 
+                      'pl1r0_uf', 'pl1v1_uf', 'pl1v2_uf', 'pl1v3_uf']
+  gas_cal_sig_names: []
+  stability_sig_names: []
+  nb_sig_names: []
+  efit_profile_sig_names: []
+  efit_scalar_sig_names: []
+  aot_scalar_sig_names: []
+  aot_prof_sig_names: []
+  efit_types: []
+  include_psirz: False
+  include_rhovn: False
+  thomson_sig_names: []
+  include_thomson_uncertainty: False
+  include_rt_thomson: False
+  cer_sig_names: []
+  cer_type:
+  cer_realtime_channels: False
+  cer_rotation_units_of_krad: False
+  zipfit_sig_names: [] #,'idensfit']
+#['ftscrot','ftscpsin','ftsc1vld','ftsspsin','ftssrot','etscr','etscrin','etscrout','etsct','etsctin']
+# ['etste', 'etsne','etscr','etsct',
+#                'etstein', 'etsnein','etscrin', 'etsctin','etsinq', 'etsinprs',
+#                'etsteout', 'etsneout', 'etsqout', 'etsprsout',
+#                'etste', 'etsne','etscr','etsct']
+  pcs_sig_names: []
+  include_radiation: False
+  include_full_ech_data: False
+  include_full_nb_data: False
+  include_gas_valve_info: False
+# the below requires gas_valve_info true, and gas_cal_sig_names nonempty
+  combined_gas_types: []
+  include_log_info: True
+  num_x_points: 33
+  trial_fits: [] #['spline_1d','linear_interp_1d','mtanh_1d', 'csaps_1d']
+logistics:
+  output_file: 'data/co2.h5'
+  overwrite_shots: True
+  num_processes: 1
+  max_shots_per_run: 1 # Bug: needs to be 1 to save data in parallel jobs
+  print_errors: False
